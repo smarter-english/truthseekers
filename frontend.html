@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Truthseekers Game</title>
+  <style>
+    body { font-family: sans-serif; margin: 40px; }
+    #container { max-width: 500px; margin: auto; }
+    .hidden { display: none; }
+    .answer { padding: 6px; background: #f2f2f2; margin-bottom: 8px; border-radius: 4px; }
+    .baddie { color: red; font-weight: bold; }
+    .goodie { color: green; font-weight: bold; }
+    .small { font-size: 12px; color: #555; }
+
+    #phaseBanner {
+      margin: 4px 0 8px 0;
+      padding: 4px 6px;
+      background: #fff3cd;
+      border: 1px solid #ffeeba;
+      border-radius: 4px;
+      color: #856404;
+    }
+
+    #playerEliminationPopup {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      display: none;
+      z-index: 9999;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      text-align: center;
+    }
+    #playerEliminationPopup.show {
+      display: block;
+      animation: playerFadeSlideDown 0.25s ease-out, playerFadeOut 0.4s ease-out 2.6s forwards;
+    }
+    #playerEliminationPopup .skull {
+      font-size: 28px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    #playerEliminationPopup .message {
+      font-weight: 600;
+      vertical-align: middle;
+    }
+    @keyframes playerFadeSlideDown {
+      from { opacity: 0; transform: translate(-50%, -10px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+    @keyframes playerFadeOut {
+      from { opacity: 1; transform: translate(-50%, 0); }
+      to { opacity: 0; transform: translate(-50%, -10px); }
+    }
+
+    #headerBar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background-color: #eee;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      min-height: 90px;
+      background-position: center bottom;
+      background-repeat: no-repeat;
+      background-size: 80px 80px; /* icon large but fits within header */
+    }
+    .header-left {
+      font-size: 13px;
+    }
+    .header-right {
+      font-size: 12px;
+      text-align: right;
+    }
+    #characterInfo {
+      margin-top: 4px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+    #characterInfo.visible {
+      display: flex;
+    }
+    #characterAvatar {
+      display: none; /* we now use the avatar as a header background instead */
+    }
+    .header-title {
+      font-weight: bold;
+      font-size: 20px;
+    }
+    #roleBadge {
+      display: none;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 4px;
+      font-size: 12px;
+    }
+
+    #tabs {
+      margin-top: 10px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #ccc;
+    }
+    .tab-button {
+      border: none;
+      background: #eee;
+      padding: 6px 10px;
+      margin-right: 4px;
+      cursor: pointer;
+      border-radius: 4px 4px 0 0;
+      font-size: 14px;
+    }
+    .tab-button.active {
+      background: #ddd;
+      font-weight: bold;
+      border-bottom: 2px solid #333;
+    }
+    .section-card {
+      margin-top: 10px;
+      opacity: 0;
+      transform: translateX(10px);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    .section-card.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  </style>
+</head>
+<body>
+<div id="container">
+
+  <h1>Truthseekers</h1>
+
+  <!-- Join Form -->
+  <div id="joinForm">
+    <p><strong>Enter Game Code:</strong></p>
+    <input id="gameCode" placeholder="e.g. 8C01C0" /><br><br>
+
+    <p><strong>Your Name:</strong></p>
+    <input id="playerName" placeholder="e.g. Maria" /><br><br>
+
+    <button onclick="joinGame()">Join Game</button>
+  </div>
+
+  <!-- Player View -->
+    <div id="playerView" class="hidden">
+      <div id="headerBar">
+        <div class="header-left">
+          <div class="header-title">Truthseekers</div>
+          <div class="small">Code: <span id="viewGameCode"></span></div>
+          <div class="small" id="roundPhaseLabel"></div>
+        </div>
+        <div class="header-right">
+          <div class="small">You: <span id="displayNameHeader"></span></div>
+          <div id="characterInfo" class="small">
+            <img id="characterAvatar" alt="Character avatar">
+            <span id="characterName"></span>
+          </div>
+          <button id="showRoleBtn" type="button" onclick="showRole()">Show Role</button>
+          <span id="roleBadge"></span>
+        </div>
+      </div>
+
+    <div id="playerEliminationPopup">
+      <span class="skull">☠️</span>
+      <span class="message" id="playerEliminationMessage"></span>
+    </div>
+
+    <div id="phaseBanner" class="small hidden"></div>
+
+    <button onclick="reloadState()">Refresh</button>
+    <button onclick="resetPlayer()">Switch Player / Leave Game</button>
+
+
+    <div id="rallySection" class="section-card hidden">
+      <h3>Rally</h3>
+      <p>Please go to rally point: <strong id="rallyPointLabel">[placeholder]</strong></p>
+      <p><strong>Pod members:</strong> <span id="podMembers"></span></p>
+    </div>
+
+    <div id="interviewSection" class="section-card visible">
+      <h3>Record an interview with <span id="partnerName"></span></h3>
+
+      <h4>Your Answers</h4>
+      <div id="myAnswersInsideInterview"></div>
+
+      <hr>
+
+      <h4 id="partnerAnswersHeading">Partner's answers</h4>
+      <div id="interviewQuestions"></div>
+
+      <button onclick="submitInterview()">Save Interview</button>
+      <div id="interviewStatus" class="small"></div>
+    </div>
+
+    <div id="feedbackSection" class="section-card hidden">
+      <h3>Feedback</h3>
+      <p class="small">Here are the answers you recorded in your interviews this round.</p>
+      <div id="feedbackContent"></div>
+    </div>
+
+    <div id="voteSection" class="section-card hidden">
+        <h3>Voting</h3>
+        <p><strong>Choose someone to eliminate:</strong></p>
+        <select id="voteTarget">
+            <option value="">-- choose a player --</option>
+        </select>
+        <button id="voteButton" onclick="submitVote()">Cast Vote</button>
+        <div id="currentVote" class="small"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const API = window.location.origin;
+  let joinToken = null;
+  let currentGameCode = null;
+  let currentRoundId = null;
+  let currentSubround = null;
+  let currentPlayerId = null;
+  let currentInterviewTarget = null;
+  let activeTab = 'interview';
+  let savedInterviews = [];
+  let lastState = null;
+  let roleTimeoutId = null;
+  let roleShownOnce = false;
+  let lastPhase = null;
+  let phaseBannerTimeoutId = null;
+  let lastVoteTargetId = null;
+  let lastVoteTargetName = "";
+  let lastSavedInterviewPartnerId = null;
+  let lastSavedInterviewName = "";
+  let playerEliminationTimeoutId = null;
+  let lastSeenEliminationSeq = 0;
+
+  function updateCharacterUI(state) {
+    const infoEl = document.getElementById("characterInfo");
+    const avatarEl = document.getElementById("characterAvatar");
+    const nameEl = document.getElementById("characterName");
+    const headerEl = document.getElementById("headerBar");
+    if (!infoEl || !avatarEl || !nameEl || !headerEl || !state || !state.player) return;
+
+    // We expect the backend to eventually provide these fields on the player:
+    // - character_name: the assigned character's name (e.g. "Anne Adams")
+    // - character_avatar_file: filename for the avatar image (e.g. "anne_adams.png")
+    //   served from /assets/icons/
+    // If they are missing, we simply hide the UI.
+    const charName = state.player.character_name || "";
+    let avatarUrl = "";
+
+    if (state.player.character_avatar_url) {
+      avatarUrl = state.player.character_avatar_url;
+    } else if (state.player.character_avatar_file) {
+      avatarUrl = `./assets/icons/${state.player.character_avatar_file}`;
+    }
+
+    if (!charName && !avatarUrl) {
+      infoEl.classList.remove("visible");
+      headerEl.style.backgroundImage = "";
+      return;
+    }
+
+    nameEl.textContent = charName || "";
+
+    if (avatarUrl) {
+      // Apply avatar as a centered background image on the header bar
+      headerEl.style.backgroundImage = `url('${avatarUrl}')`;
+    } else {
+      headerEl.style.backgroundImage = "";
+    }
+
+    // Keep the character name visible under "You"
+    infoEl.classList.add("visible");
+  }
+
+  function formatName(displayName, characterName) {
+    if (characterName) {
+        return `${displayName} (${characterName})`;
+    }
+    return displayName;
+}
+
+
+  function showPlayerEliminationPopup(nameList) {
+    const popup = document.getElementById("playerEliminationPopup");
+    const msgEl = document.getElementById("playerEliminationMessage");
+    if (!popup || !msgEl) return;
+
+    msgEl.textContent = `${nameList} has been eliminated.`;
+    // restart animation
+    popup.classList.remove("show");
+    void popup.offsetWidth;
+    popup.classList.add("show");
+
+    if (playerEliminationTimeoutId) {
+      clearTimeout(playerEliminationTimeoutId);
+    }
+    // hide after ~3 seconds
+    playerEliminationTimeoutId = setTimeout(() => {
+      popup.classList.remove("show");
+    }, 3000);
+  }
+
+  // --- Interview persistence helpers ---
+  function persistInterviewDraft(questionId, value) {
+    if (!currentRoundId || !currentInterviewTarget) return;
+    const key = `draft_${currentRoundId}_${currentInterviewTarget.player_id}_${questionId}`;
+    localStorage.setItem(key, value);
+  }
+
+  function loadInterviewDraft(questionId) {
+    if (!currentRoundId || !currentInterviewTarget) return "";
+    const key = `draft_${currentRoundId}_${currentInterviewTarget.player_id}_${questionId}`;
+    return localStorage.getItem(key) || "";
+  }
+
+  function clearInterviewDrafts() {
+    if (!currentRoundId || !currentInterviewTarget) return;
+    const prefix = `draft_${currentRoundId}_${currentInterviewTarget.player_id}_`;
+    const keysToDelete = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) {
+        keysToDelete.push(k);
+      }
+    }
+    keysToDelete.forEach(k => localStorage.removeItem(k));
+  }
+
+  // Try auto-restore on page load + auto polling every 3 seconds
+  window.onload = () => {
+    const stored = localStorage.getItem("truthseekers-token");
+    const storedGame = localStorage.getItem("truthseekers-gamecode");
+    if (stored && storedGame) {
+      joinToken = stored;
+      currentGameCode = storedGame;
+      reloadState();
+    }
+
+    // Every 3 seconds, update game state silently
+    setInterval(async () => {
+      if (!joinToken) return;
+      try {
+        const res = await fetch(`${API}/me/current-state`, {
+          headers: { Authorization: `Bearer ${joinToken}` }
+        });
+        if (!res.ok) return;
+        const state = await res.json();
+        applyStateChanges(state);
+      } catch (err) {
+        console.error('Auto-refresh failed:', err);
+      }
+    }, 3000);
+  };
+
+  async function joinGame() {
+    const code = document.getElementById("gameCode").value.trim();
+    const name = document.getElementById("playerName").value.trim();
+
+    if (!code || !name) {
+      alert("Please enter both code and name.");
+      return;
+    }
+
+    const res = await fetch(`${API}/games/${code}/join`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ display_name: name })
+    });
+
+    if (!res.ok) {
+      alert("Could not join game.");
+      return;
+    }
+
+    const data = await res.json();
+    joinToken = data.join_token;
+    currentGameCode = code;
+
+    // Store for reloads
+    localStorage.setItem("truthseekers-token", joinToken);
+    localStorage.setItem("truthseekers-gamecode", code);
+
+    reloadState();
+  }
+
+  async function reloadState() {
+    if (!joinToken) {
+      alert("No player joined.");
+      return;
+    }
+
+    const res = await fetch(`${API}/me/current-state`, {
+      headers: { Authorization: `Bearer ${joinToken}` }
+    });
+
+    if (!res.ok) {
+      alert("Could not restore state. Maybe your token expired?");
+      return;
+    }
+
+    const state = await res.json();
+    lastState = state;
+    showPlayerView(state);
+  }
+
+  function resetPlayer() {
+    localStorage.removeItem("truthseekers-token");
+    localStorage.removeItem("truthseekers-gamecode");
+    joinToken = null;
+    currentGameCode = null;
+    currentRoundId = null;
+    currentSubround = null;
+    currentPlayerId = null;
+    currentInterviewTarget = null;
+    savedInterviews = [];
+    lastState = null;
+    roleShownOnce = false;
+    lastPhase = null;
+    lastVoteTargetId = null;
+    lastVoteTargetName = "";
+    lastSavedInterviewPartnerId = null;
+    lastSavedInterviewName = "";
+    lastSeenEliminationSeq = 0;
+
+    document.getElementById("playerView").classList.add("hidden");
+    document.getElementById("joinForm").classList.remove("hidden");
+    document.getElementById("playerName").value = "";
+    // document.getElementById("answers").innerHTML = "";
+    document.getElementById("interviewQuestions").innerHTML = "";
+    document.getElementById("feedbackContent").innerHTML = "";
+    document.getElementById("currentVote").textContent = "";
+    const statusDiv = document.getElementById("interviewStatus");
+    if (statusDiv) statusDiv.textContent = "";
+    const titleEl = document.querySelector("#container h1");
+    if (titleEl) titleEl.classList.remove("hidden");
+  }
+
+  // Lightweight updater used during auto-refresh so typing isn't interrupted
+  function applyStateChanges(state) {
+    const prevRoundId = currentRoundId;
+    const prevPartnerId = currentInterviewTarget && currentInterviewTarget.player_id;
+
+    // Global elimination event from backend
+    const event = state.eliminationEvent;
+    if (event && typeof event.seq === "number" && event.seq > lastSeenEliminationSeq) {
+      showPlayerEliminationPopup(event.display_name);
+      lastSeenEliminationSeq = event.seq;
+    }
+
+    lastState = state;
+    updateCharacterUI(state);
+
+    // Sync round/subround and partner from state
+    currentRoundId = state.currentRound ? state.currentRound.id : currentRoundId;
+    currentSubround = state.currentSubround || currentSubround;
+    currentInterviewTarget = state.interviewTarget || currentInterviewTarget;
+
+    const newPartnerId = currentInterviewTarget && currentInterviewTarget.player_id;
+    const partnerChanged = newPartnerId && newPartnerId !== prevPartnerId;
+    const roundChanged = currentRoundId !== prevRoundId;
+
+    // If the round changed, clear last vote state and UI
+    if (roundChanged) {
+      lastVoteTargetId = null;
+      lastVoteTargetName = "";
+      const currentVoteDiv = document.getElementById("currentVote");
+      if (currentVoteDiv) currentVoteDiv.textContent = "";
+    }
+
+    // Update "Your Answers" block inside Interview tab (safe, read-only)
+    const myAnsDiv = document.getElementById("myAnswersInsideInterview");
+    if (myAnsDiv) {
+      myAnsDiv.innerHTML = "";
+      if (state.answerSheet) {
+        state.answerSheet.forEach(q => {
+          const div = document.createElement("div");
+          div.className = "answer";
+          div.innerHTML = `<strong>${q.text}</strong><br>${q.my_answer}`;
+          myAnsDiv.appendChild(div);
+        });
+      }
+    }
+
+    // If partner or round changed, clear drafts and rebuild interview form
+    if (partnerChanged || roundChanged) {
+      clearInterviewDrafts();
+      buildInterviewForm(state);
+    }
+
+    // Update rally section
+    buildRallySection(state);
+
+    // Update feedback & voting sections
+    buildFeedbackSection();
+    buildVoteSection(state);
+
+    // Handle phase changes (tab changes)
+    const phase = state.phase || (state.game && state.game.phase);
+    const banner = document.getElementById("phaseBanner");
+
+    // Update round/phase label in header
+    const roundPhaseEl = document.getElementById("roundPhaseLabel");
+    if (roundPhaseEl) {
+      const roundNum = state.currentRound
+        ? state.currentRound.round_number
+        : (state.game && state.game.current_round);
+      const phaseIcons = {
+        rally: '📍 Rally',
+        interview1: '💬 Interview 1 of 2',
+        interview2: '💬 Interview 2 of 2',
+        feedback: '💭 Feedback',
+        voting: '🗳️ Voting'
+      };
+      const phaseLabel = phase ? (phaseIcons[phase] || phase) : '';
+      if (roundNum) {
+        roundPhaseEl.textContent = `Round ${roundNum} – ${phaseLabel || '...'}`;
+      } else if (phaseLabel) {
+        roundPhaseEl.textContent = phaseLabel;
+      } else {
+        roundPhaseEl.textContent = '';
+      }
+    }
+
+    if (banner && phase && phase !== lastPhase) {
+      const phaseNames = {
+        rally: 'Rally',
+        interview1: 'Interview 1',
+        interview2: 'Interview 2',
+        feedback: 'Feedback',
+        voting: 'Voting'
+      };
+      const label = phaseNames[phase] || phase;
+      banner.textContent = `Phase: ${label}`;
+      banner.classList.remove("hidden");
+
+      if (phaseBannerTimeoutId) clearTimeout(phaseBannerTimeoutId);
+      phaseBannerTimeoutId = setTimeout(() => {
+        banner.classList.add("hidden");
+      }, 2000);
+
+      lastPhase = phase;
+    }
+
+    // Switch visible section WITHOUT rebuilding interview tab (except when partner/round changed)
+    if (phase === 'rally') {
+      setActiveTab('rally');
+    } else if (phase === 'interview1' || phase === 'interview2') {
+      setActiveTab('interview');
+    } else if (phase === 'feedback') {
+        setActiveTab('feedback');
+        buildFeedbackSection();  // <— FORCE REFRESH OF CONTENT
+    } else if (phase === 'voting') {
+      setActiveTab('voting');
+    }
+  }
+
+  function showPlayerView(state) {
+    const titleEl = document.querySelector("#container h1");
+    if (titleEl) titleEl.classList.add("hidden");
+    document.getElementById("joinForm").classList.add("hidden");
+    document.getElementById("playerView").classList.remove("hidden");
+
+    const headerName = formatName(
+        state.player.display_name,
+        state.player.character_name
+        );
+        document.getElementById("displayNameHeader").textContent =
+            headerName + (state.player.is_alive ? "" : " 👻");
+    updateCharacterUI(state);
+    document.getElementById("viewGameCode").textContent = state.game.code;
+
+    // Update round/phase label in header for initial render
+    const roundPhaseEl = document.getElementById("roundPhaseLabel");
+    if (roundPhaseEl) {
+      const phase = state.phase || (state.game && state.game.phase);
+      const roundNum = state.currentRound
+        ? state.currentRound.round_number
+        : (state.game && state.game.current_round);
+      const phaseIcons = {
+        rally: '📍 Rally',
+        interview1: '💬 Interview 1 of 2',
+        interview2: '💬 Interview 2 of 2',
+        feedback: '💭 Feedback',
+        voting: '🗳️ Voting'
+      };
+      const phaseLabel = phase ? (phaseIcons[phase] || phase) : '';
+
+      if (roundNum) {
+        roundPhaseEl.textContent = `Round ${roundNum} – ${phaseLabel || '...'}`;
+      } else if (phaseLabel) {
+        roundPhaseEl.textContent = phaseLabel;
+      } else {
+        roundPhaseEl.textContent = '';
+      }
+    }
+
+    const roleBadge = document.getElementById("roleBadge");
+    if (roleBadge) {
+      roleBadge.textContent = state.player.role;
+      roleBadge.className = state.player.role === "baddie" ? "baddie" : "goodie";
+
+      // Only show role automatically on FIRST load
+      if (!roleShownOnce) {
+        roleBadge.style.display = "inline-block";
+        if (roleTimeoutId) clearTimeout(roleTimeoutId);
+        roleTimeoutId = setTimeout(() => {
+          roleBadge.style.display = "none";
+        }, 10000);
+        roleShownOnce = true;
+      }
+    }
+
+    // remember IDs for later
+    currentGameCode = state.game.code;
+    currentPlayerId = state.player.id;
+    currentRoundId = state.currentRound ? state.currentRound.id : null;
+    currentSubround = state.currentSubround || 1;
+    currentInterviewTarget = state.interviewTarget || null;
+
+    // Render own answers inside interview section
+    const myAnsDiv = document.getElementById("myAnswersInsideInterview");
+    if (myAnsDiv) {
+      myAnsDiv.innerHTML = "";
+      if (state.answerSheet) {
+        state.answerSheet.forEach(q => {
+          const div = document.createElement("div");
+          div.className = "answer";
+          div.innerHTML = `<strong>${q.text}</strong><br>${q.my_answer}`;
+          myAnsDiv.appendChild(div);
+        });
+      }
+    }
+
+    buildInterviewForm(state);
+    buildFeedbackSection();
+    buildVoteSection(state);
+    buildRallySection(state);
+
+    // Auto-select tab based on game phase
+    const phase = state.phase || (state.game && state.game.phase);
+
+    // Show notification banner when phase changes
+    const banner = document.getElementById("phaseBanner");
+    if (banner && phase && phase !== lastPhase) {
+      const phaseNames = {
+        rally: 'Rally',
+        interview1: 'Interview 1',
+        interview2: 'Interview 2',
+        feedback: 'Feedback',
+        voting: 'Voting'
+      };
+      const label = phaseNames[phase] || phase;
+      banner.textContent = `Phase: ${label}`;
+      banner.classList.remove("hidden");
+      if (phaseBannerTimeoutId) clearTimeout(phaseBannerTimeoutId);
+      phaseBannerTimeoutId = setTimeout(() => {
+        banner.classList.add("hidden");
+      }, 2000);
+      lastPhase = phase;
+    }
+
+    if (phase === 'rally') {
+      setActiveTab('rally');
+    } else if (phase === 'interview1' || phase === 'interview2') {
+      setActiveTab('interview');
+    } else if (phase === 'feedback') {
+      setActiveTab('feedback');
+    } else if (phase === 'voting') {
+      setActiveTab('voting');
+    } else {
+      // Fallback heuristic if phase is not set
+      if (state.currentRound && state.interviewTarget) {
+        setActiveTab('interview');
+      } else if (savedInterviews.length > 0) {
+        setActiveTab('feedback');
+      } else if (state.eligibleTargets && state.eligibleTargets.length > 0) {
+        setActiveTab('voting');
+      } else {
+        setActiveTab('interview');
+      }
+    }
+  } // <-- closes showPlayerView
+
+  function buildRallySection(state) {
+    const section = document.getElementById("rallySection");
+    const labelEl = document.getElementById("rallyPointLabel");
+    const membersEl = document.getElementById("podMembers");
+    if (!section || !labelEl || !membersEl) return;
+
+    if (state.pod && state.pod.label) {
+        // Compute rally point from Pod label
+        const podLabel = state.pod.label; // e.g. "Pod A"
+        let rallyPoint = podLabel;
+        if (podLabel.toLowerCase().startsWith("pod ")) {
+        rallyPoint = podLabel.substring(4);
+        }
+        labelEl.textContent = rallyPoint;
+
+        // List pod members
+        if (state.podMembers && state.podMembers.length > 0) {
+        membersEl.textContent = state.podMembers
+            .map(m => {
+            const label = formatName(m.display_name, m.character_name);
+            return label + (m.is_alive ? "" : " 👻");
+            })
+            .join(", ");
+        } else {
+            membersEl.textContent = "[no pod members?]";
+        }
+
+        section.classList.remove("hidden");
+    } else {
+        // No pod yet → hide entire section
+        membersEl.textContent = "";
+        section.classList.add("hidden");
+    }
+}
+
+  function setActiveTab(tab) {
+    activeTab = tab;
+
+    const sections = {
+      rally: document.getElementById("rallySection"),
+      interview: document.getElementById("interviewSection"),
+      feedback: document.getElementById("feedbackSection"),
+      voting: document.getElementById("voteSection")
+    };
+
+    // Hide ALL sections completely
+    Object.values(sections).forEach(sec => {
+      if (!sec) return;
+      sec.classList.remove("visible");
+      sec.classList.add("hidden");
+      sec.style.display = "none";
+    });
+
+    // Show ONLY the active section (with animation)
+    const active = sections[tab];
+    if (active) {
+      active.classList.remove("hidden");
+      active.style.display = "block";
+      // force reflow so CSS transition applies
+      void active.offsetWidth;
+      active.classList.add("visible");
+    }
+  }
+
+  function buildInterviewForm(state) {
+    const section = document.getElementById("interviewSection");
+    const questionsDiv = document.getElementById("interviewQuestions");
+    const partnerNameSpan = document.getElementById("partnerName");
+    const partnerAnswersHeading = document.getElementById("partnerAnswersHeading");
+
+    if (!section || !questionsDiv) return;
+
+    // Clear drafts if the partner has changed
+    if (lastState && lastState.interviewTarget && currentInterviewTarget) {
+      if (lastState.interviewTarget.player_id !== currentInterviewTarget.player_id) {
+        clearInterviewDrafts();
+      }
+    }
+
+    // reset UI
+    questionsDiv.innerHTML = "";
+    if (partnerNameSpan) partnerNameSpan.textContent = "";
+    if (partnerAnswersHeading) partnerAnswersHeading.textContent = "Partner's answers";
+
+    // if we don't have round/target, hide the section
+    if (!state.currentRound || !state.answerSheet || !state.interviewTarget) {
+      section.style.display = "none";
+      return;
+    }
+
+    section.style.display = "block";
+
+    // fill partner name in header and answers heading
+    const partnerName = formatName(
+        state.interviewTarget.display_name || "",
+        state.interviewTarget.character_name || ""
+    );
+    if (partnerNameSpan) {
+      partnerNameSpan.textContent = partnerName;
+    }
+    if (partnerAnswersHeading) {
+      partnerAnswersHeading.textContent = `${partnerName}'s answers`;
+    }
+
+    // Update persistent interview status line
+    const statusDiv = document.getElementById("interviewStatus");
+    if (statusDiv) {
+      if (lastSavedInterviewPartnerId === state.interviewTarget.player_id) {
+        statusDiv.textContent = `Interview with ${lastSavedInterviewName || partnerName} saved.`;
+      } else {
+        statusDiv.textContent = "";
+      }
+    }
+
+    // For each question, create a text input to record partner's answer
+    state.answerSheet.forEach(q => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "answer";
+
+      const label = document.createElement("div");
+      label.innerHTML = `<strong>${q.text}</strong>`;
+      wrapper.appendChild(label);
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "What did they say?";
+      input.setAttribute("data-question-id", q.question_id);
+      input.style.width = "100%";
+
+      // Restore persisted draft value
+      input.value = loadInterviewDraft(q.question_id);
+
+      // Save draft on every change
+      input.addEventListener("input", () => {
+        persistInterviewDraft(q.question_id, input.value.trim());
+      });
+
+      wrapper.appendChild(input);
+      questionsDiv.appendChild(wrapper);
+    });
+  }
+
+  function buildFeedbackSection() {
+    const section = document.getElementById("feedbackSection");
+    const container = document.getElementById("feedbackContent");
+    if (!section || !container) return;
+
+    container.innerHTML = "";
+
+    // Prefer server-provided interviews for the current round
+    const s = lastState;
+    const interviews = s && s.myInterviews ? s.myInterviews : [];
+
+    if (!interviews.length) {
+      section.classList.add("hidden");
+      return;
+    }
+
+    section.classList.remove("hidden");
+
+    interviews.forEach(intv => {
+      const div = document.createElement("div");
+      div.className = "answer";
+      const header = document.createElement("div");
+      header.innerHTML = `<strong>Interview with ${intv.interviewee_name}</strong>`;
+      div.appendChild(header);
+
+      (intv.answers || []).forEach(a => {
+        const line = document.createElement("div");
+        line.innerHTML = `<em>${a.question}</em><br>${a.reported_value}`;
+        div.appendChild(line);
+      });
+
+      container.appendChild(div);
+    });
+  }
+
+  function buildVoteSection(state) {
+    const section = document.getElementById("voteSection");
+    const select = document.getElementById("voteTarget");
+    const currentVoteDiv = document.getElementById("currentVote");
+    const voteBtn = document.getElementById("voteButton");
+
+    if (!section || !select) return;
+
+    // If ghost, show a friendly message and hide voting controls
+    if (!state.player.is_alive) {
+        section.classList.remove("hidden");
+
+        // hide the dropdown and button
+        select.classList.add("hidden");
+        if (voteBtn) voteBtn.classList.add("hidden");
+
+        // show ghost message
+        if (currentVoteDiv) {
+        currentVoteDiv.classList.remove("hidden");
+        currentVoteDiv.textContent = "Sorry - no voting for you: you are a ghost.";
+        }
+        return;
+    }
+
+    const targets = state.eligibleTargets || [];
+    if (!targets.length) {
+        section.classList.add("hidden");
+        return;
+    }
+
+    section.classList.remove("hidden");
+
+    // ensure controls are visible for living players
+    select.classList.remove("hidden");
+    if (voteBtn) voteBtn.classList.remove("hidden");
+    if (currentVoteDiv) currentVoteDiv.classList.remove("hidden");
+
+    // Remember what the user currently has selected (if any)
+    const previousValue = select.value;
+
+    select.innerHTML = '<option value="">-- choose a player --</option>';
+    targets.forEach(t => {
+        const opt = document.createElement("option");
+        opt.value = t.id;
+        opt.textContent = formatName(t.display_name, t.character_name);
+        select.appendChild(opt);
+    });
+
+    // Try to restore selection: prefer in-progress selection, then last submitted vote
+    const optionValues = Array.from(select.options).map(o => o.value);
+    if (previousValue && optionValues.includes(previousValue)) {
+        select.value = previousValue;
+    } else if (lastVoteTargetId !== null && optionValues.includes(String(lastVoteTargetId))) {
+        select.value = String(lastVoteTargetId);
+    } else {
+        select.value = "";
+    }
+
+    // Restore the "You voted" message, if any
+    if (currentVoteDiv) {
+        if (lastVoteTargetName) {
+        currentVoteDiv.textContent = `You voted to eliminate ${lastVoteTargetName}.`;
+        } else {
+        currentVoteDiv.textContent = "";
+        }
+    }
+}
+
+  function showRole() {
+    if (!lastState) return;
+    const roleBadge = document.getElementById("roleBadge");
+    if (!roleBadge) return;
+    roleBadge.textContent = lastState.player.role;
+    roleBadge.className = lastState.player.role === "baddie" ? "baddie" : "goodie";
+    roleBadge.style.display = "inline-block";
+    if (roleTimeoutId) clearTimeout(roleTimeoutId);
+    // show role for 5 seconds
+    roleTimeoutId = setTimeout(() => {
+      roleBadge.style.display = "none";
+    }, 5000);
+  }
+
+  async function submitInterview() {
+    if (!currentRoundId) {
+      alert("No active round.");
+      return;
+    }
+    if (!joinToken) {
+      alert("You are not joined.");
+      return;
+    }
+    if (!currentInterviewTarget) {
+      alert("You do not have an assigned partner in this subround.");
+      return;
+    }
+
+    const inputs = document.querySelectorAll("#interviewQuestions input[data-question-id]");
+    const answers = [];
+    const questionMap = {};
+
+    // Build a map from question_id to question text using lastState.answerSheet
+    if (lastState && lastState.answerSheet) {
+      lastState.answerSheet.forEach(q => {
+        questionMap[q.question_id] = q.text;
+      });
+    }
+
+    inputs.forEach(input => {
+      const questionId = Number(input.getAttribute("data-question-id"));
+      const reported = input.value.trim();
+      if (reported) {
+        answers.push({
+          question_id: questionId,
+          reported_value: reported
+        });
+      }
+    });
+
+    if (answers.length === 0) {
+      alert("Please enter at least one answer.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API}/rounds/${currentRoundId}/interviews`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${joinToken}`
+        },
+        body: JSON.stringify({
+          interviewee_player_id: currentInterviewTarget.player_id,
+          answers
+        })
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(text);
+        alert("Could not save interview.");
+        return;
+      }
+
+      // Save a local copy for feedback
+      const feedbackAnswers = answers.map(a => ({
+        question_id: a.question_id,
+        question: questionMap[a.question_id] || "",
+        reported_value: a.reported_value
+      }));
+
+      savedInterviews.push({
+        round_id: currentRoundId,
+        interviewee_player_id: currentInterviewTarget.player_id,
+        interviewee_name: currentInterviewTarget.display_name,
+        answers: feedbackAnswers
+      });
+
+      // Clear persisted drafts for this partner & round
+      clearInterviewDrafts();
+
+      // Record last saved interview partner for persistent status
+      lastSavedInterviewPartnerId = currentInterviewTarget.player_id;
+      lastSavedInterviewName = currentInterviewTarget.display_name;
+
+      const statusDiv = document.getElementById("interviewStatus");
+      if (statusDiv) {
+        statusDiv.textContent = `Interview with ${lastSavedInterviewName} saved.`;
+      }
+
+      buildFeedbackSection();
+      alert("Interview saved!");
+    } catch (err) {
+      console.error(err);
+      alert("Error saving interview (see console).");
+    }
+  }
+
+  async function submitVote() {
+    if (!currentRoundId) {
+      alert("No active round.");
+      return;
+    }
+    if (!joinToken) {
+      alert("You are not joined.");
+      return;
+    }
+
+    const select = document.getElementById("voteTarget");
+    const currentVoteDiv = document.getElementById("currentVote");
+    if (!select) return;
+
+    const value = select.value;
+    if (!value) {
+      alert("Please choose someone to eliminate.");
+      return;
+    }
+
+    const name = select.options[select.selectedIndex].textContent;
+    if (!confirm(`Are you sure you want to eliminate ${name}?`)) return;
+
+    try {
+      const res = await fetch(`${API}/rounds/${currentRoundId}/vote`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${joinToken}`
+        },
+        body: JSON.stringify({ target_player_id: Number(value) })
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(text);
+        alert("Could not submit vote: " + text);
+        return;
+      }
+
+      // Remember last vote in memory
+      lastVoteTargetId = Number(value);
+      lastVoteTargetName = name;
+
+      if (currentVoteDiv) {
+        currentVoteDiv.textContent = `You voted to eliminate ${name}.`;
+      }
+      alert(`Your vote to eliminate ${name} has been recorded.`);
+    } catch (err) {
+      console.error(err);
+      alert("Error submitting vote (see console).");
+    }
+  }
+</script>
+
+</body>

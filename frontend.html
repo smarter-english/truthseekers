@@ -41,6 +41,10 @@
     .goodie { color: green; font-weight: bold; }
     .small { font-size: 12px; color: #555; }
 
+    #podMembers {
+      white-space: pre-line; /* to preserve line breaks */
+    }
+
     #phaseBanner {
       margin: 4px 0 8px 0;
       padding: 4px 6px;
@@ -480,6 +484,7 @@
   }
 
   function resetPlayer() {
+    if (joinToken && !confirm("Leave game?")) return;
     localStorage.removeItem("truthseekers-token");
     localStorage.removeItem("truthseekers-gamecode");
     joinToken = null;
@@ -681,7 +686,7 @@
         if (roleTimeoutId) clearTimeout(roleTimeoutId);
         roleTimeoutId = setTimeout(() => {
           roleBadge.style.display = "none";
-        }, 10000);
+        }, 1000);
         roleShownOnce = true;
       }
     }
@@ -779,7 +784,7 @@
             const label = formatName(m.display_name, m.character_name);
             return label + (m.is_alive ? "" : " 👻");
             })
-            .join("<br>");
+            .join("\n");
         } else {
             membersEl.textContent = "[no pod members?]";
         }
@@ -1011,10 +1016,10 @@
     roleBadge.className = lastState.player.role === "baddie" ? "baddie" : "goodie";
     roleBadge.style.display = "inline-block";
     if (roleTimeoutId) clearTimeout(roleTimeoutId);
-    // show role for 5 seconds
+    // show role for 1 second
     roleTimeoutId = setTimeout(() => {
       roleBadge.style.display = "none";
-    }, 5000);
+    }, 1000);
   }
 
   async function submitInterview() {

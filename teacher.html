@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <title>Truthseekers Teacher Dashboard</title>
   <style>
     body {
@@ -171,6 +172,14 @@
     <div id="debugView" class="section" style="display:none;">
     <h2>Game Detail</h2>
     <div id="gameInfo"></div>
+    <div style="margin-top:10px;">
+      <div class="small">Student join link:</div>
+      <div id="joinLink" class="small" style="word-break: break-all;"></div>
+      <div style="margin-top:6px;">
+        <div class="small">Scan to join:</div>
+        <div id="qrContainer"></div>
+      </div>
+    </div>
         <div style="margin-top:8px;">
   <button class="secondary" onclick="setPhase('rally')">Rally</button>
   <button class="secondary" onclick="setPhase('interview1')">Interview 1</button>
@@ -178,7 +187,7 @@
   <button class="secondary" onclick="setPhase('feedback')">Feedback</button>
   <button class="secondary" onclick="setPhase('voting')">Voting</button>
   <button class="secondary" onclick="nextRound()">Next Round</button>
-  <button class="secondary" id="toggleRolesBtn" onclick="toggleRoles()">Hide roles</button>
+  <button class="secondary" id="toggleRolesBtn" onclick="toggleRoles()">Show roles</button>
   <button class="secondary" onclick="refreshDebug()">Refresh Debug</button>
 </div>
 
@@ -497,6 +506,26 @@
         Subround: ${subroundText}
       </div>
     `;
+
+    // Student join link + QR code (prefills code in frontend)
+    const joinLinkEl = document.getElementById("joinLink");
+    const qrContainer = document.getElementById("qrContainer");
+    if (joinLinkEl && qrContainer && g && g.code) {
+      const joinUrl = window.location.origin + "/frontend.html?code=" + encodeURIComponent(g.code);
+      joinLinkEl.textContent = joinUrl;
+
+      // Rebuild QR each refresh to avoid duplicates
+      qrContainer.innerHTML = "";
+      if (window.QRCode) {
+        new QRCode(qrContainer, {
+          text: joinUrl,
+          width: 140,
+          height: 140,
+        });
+      } else {
+        qrContainer.textContent = "QR library not loaded.";
+      }
+    }
 
     // Players table
     const playersDiv = document.getElementById("playersTable");

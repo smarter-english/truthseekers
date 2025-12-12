@@ -241,6 +241,22 @@
   let playerEliminationTimeoutId = null;
   let lastSeenEliminationSeq = 0;
 
+  function prefillGameCodeFromQuery() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        if (!code) return;
+
+        // CHANGE THIS ID IF NEEDED:
+        const codeInput = document.getElementById("gameCode");
+        if (codeInput) {
+        codeInput.value = code;
+        }
+    } catch (e) {
+        console.error("Error pre-filling game code from URL", e);
+    }
+}
+
   function updateCharacterUI(state) {
     const infoEl = document.getElementById("characterInfo");
     const avatarEl = document.getElementById("characterAvatar");
@@ -337,6 +353,7 @@
 
   // Try auto-restore on page load + auto polling every 3 seconds
   window.onload = () => {
+    prefillGameCodeFromQuery();
     const stored = localStorage.getItem("truthseekers-token");
     const storedGame = localStorage.getItem("truthseekers-gamecode");
     if (stored && storedGame) {

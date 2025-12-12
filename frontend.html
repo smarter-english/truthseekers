@@ -341,7 +341,7 @@
       return;
     }
 
-    nameEl.textContent = charName || "";
+    nameEl.textContent = (charName || "") + (state.player.is_alive ? "" : " 👻");
 
     if (avatarUrl) {
       // Apply avatar as a centered background image on the header bar
@@ -531,6 +531,11 @@
     lastState = state;
     updateCharacterUI(state);
 
+    const nameHeaderEl = document.getElementById("displayNameHeader");
+    if (nameHeaderEl && state.player) {
+      nameHeaderEl.textContent = state.player.display_name;
+    }
+
     // Sync round/subround and partner from state
     currentRoundId = state.currentRound ? state.currentRound.id : currentRoundId;
     currentSubround = state.currentSubround || currentSubround;
@@ -641,12 +646,8 @@
     document.getElementById("joinForm").classList.add("hidden");
     document.getElementById("playerView").classList.remove("hidden");
 
-    const headerName = formatName(
-        state.player.display_name,
-        state.player.character_name
-        );
-        document.getElementById("displayNameHeader").textContent =
-            headerName + (state.player.is_alive ? "" : " 👻");
+    document.getElementById("displayNameHeader").textContent =
+      state.player.display_name;
     updateCharacterUI(state);
     document.getElementById("viewGameCode").textContent = state.game.code;
 
@@ -779,7 +780,7 @@
 
         // List pod members
         if (state.podMembers && state.podMembers.length > 0) {
-        membersEl.textContent = state.podMembers
+        membersEl.textContent = "\n" + state.podMembers
             .map(m => {
             const label = formatName(m.display_name, m.character_name);
             return label + (m.is_alive ? "" : " 👻");

@@ -597,13 +597,14 @@
           ? '<span class="badge">alive</span>'
           : '<span class="badge dead">out</span>';
 
+        const fullName = playerLabelById[p.id] || p.display_name;
+
         let actionHtml = '';
         if (p.is_alive) {
           const confirmLabel = fullName;
           actionHtml = `<button class="danger" onclick="markGhost(${p.id}, ${JSON.stringify(confirmLabel)})">Ghost 👻</button>`;
         }
 
-        const fullName = playerLabelById[p.id] || p.display_name;
         html += `<tr>
           <td>${p.id}</td>
           <td>${fullName}</td>

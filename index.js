@@ -700,6 +700,34 @@ app.get('/games', async (req, res) => {
   }
 });
 
+// teacher: delete a game (and cascade delete all related rows)
+app.delete('/games/:id', async (req, res) => {
+  const gameId = Number(req.params.id);
+  if (!gameId) {
+    return res.status(400).json({ error: 'Invalid game id' });
+  }
+
+  try {
+    const result = await pool.query(
+      'DELETE FROM games WHERE id = $1 RETURNING id, code',
+      [gameId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    res.json({
+      ok: true,
+      deleted_game_id: result.rows[0].id,
+      deleted_code: result.rows[0].code,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete game' });
+  }
+});
+
 // start game: assign roles and move to "in_progress"
 app.post('/games/:id/start', async (req, res) => {
   const gameId = Number(req.params.id);
@@ -1233,8 +1261,14 @@ app.post('/games/:id/next-round', async (req, res) => {
 
     await createNextRoundWithMutations(gameId);
 
+    // When starting a new round, default the phase back to rally (and reset subround)
+    await pool.query(
+      'UPDATE games SET phase = $1, current_subround = 1 WHERE id = $2',
+      ['rally', gameId]
+    );
+
     const updated = await pool.query(
-      'SELECT current_round, current_subround FROM games WHERE id = $1',
+      'SELECT current_round, current_subround, phase FROM games WHERE id = $1',
       [gameId]
     );
     const g2 = updated.rows[0];
@@ -1244,6 +1278,7 @@ app.post('/games/:id/next-round', async (req, res) => {
       game_id: gameId,
       current_round: g2.current_round,
       current_subround: g2.current_subround,
+      phase: g2.phase,
     });
   } catch (err) {
     console.error(err);

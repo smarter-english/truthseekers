@@ -261,6 +261,32 @@
 
         right.appendChild(debugBtn);
         right.appendChild(startBtn);
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "danger";
+        deleteBtn.textContent = "Delete";
+        deleteBtn.onclick = async () => {
+          if (!confirm(`Delete game ${game.id} (${game.code})? This cannot be undone.`)) return;
+          try {
+            const res = await fetch(API + `/games/${game.id}`, { method: "DELETE" });
+            if (!res.ok) {
+              const text = await res.text();
+              console.error(text);
+              alert("Could not delete game: " + text);
+              return;
+            }
+            // If we're viewing this game, hide the debug panel
+            if (currentGameId === game.id) {
+              currentGameId = null;
+              currentDebugData = null;
+              document.getElementById("debugView").style.display = "none";
+            }
+            await loadGames();
+          } catch (err) {
+            console.error(err);
+            alert("Error deleting game (see console).");
+          }
+        };
+        right.appendChild(deleteBtn);
 
         header.appendChild(left);
         header.appendChild(right);

@@ -426,9 +426,10 @@
     }
   }
 
-  async function markGhost(playerId) {
+  async function markGhost(playerId, playerLabel) {
     if (!currentGameId) return;
-    if (!confirm("Mark player " + playerId + " as a ghost?")) return;
+    const label = playerLabel || ("player " + playerId);
+    if (!confirm("Mark " + label + " as a ghost?")) return;
 
     try {
       const res = await fetch(API + `/games/${currentGameId}/players/${playerId}/ghost`, {
@@ -598,7 +599,8 @@
 
         let actionHtml = '';
         if (p.is_alive) {
-          actionHtml = `<button class="danger" onclick="markGhost(${p.id})">Ghost 👻</button>`;
+          const confirmLabel = fullName;
+          actionHtml = `<button class="danger" onclick="markGhost(${p.id}, ${JSON.stringify(confirmLabel)})">Ghost 👻</button>`;
         }
 
         const fullName = playerLabelById[p.id] || p.display_name;

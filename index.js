@@ -701,30 +701,115 @@ app.get('/games', async (req, res) => {
 });
 
 // teacher: delete a game (and cascade delete all related rows)
+// teacher: delete a game (and delete all related rows)
 app.delete('/games/:id', async (req, res) => {
   const gameId = Number(req.params.id);
   if (!gameId) {
     return res.status(400).json({ error: 'Invalid game id' });
   }
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    // Round-scoped data
+    await client.query(
+      `DELETE FROM baddie_mutations bm
+       USING rounds r
+       WHERE bm.round_id = r.id
+         AND r.game_id = $1`,
+      [gameId]
+    );
+
+    await client.query(
+      `DELETE FROM interview_answers ia
+       USING interviews i, rounds r
+       WHERE ia.interview_id = i.id
+         AND i.round_id = r.id
+         AND r.game_id = $1`,
+      [gameId]
+    );
+
+    await client.query(
+      `DELETE FROM interview_assignments a
+       USING rounds r
+       WHERE a.round_id = r.id
+         AND r.game_id = $1`,
+      [gameId]
+    );
+
+    await client.query(
+      `DELETE FROM interviews i
+       USING rounds r
+       WHERE i.round_id = r.id
+         AND r.game_id = $1`,
+      [gameId]
+    );
+
+    await client.query(
+      `DELETE FROM votes v
+       USING rounds r
+       WHERE v.round_id = r.id
+         AND r.game_id = $1`,
+      [gameId]
+    );
+
+    await client.query(
+      `DELETE FROM round_questions rq
+       USING rounds r
+       WHERE rq.round_id = r.id
+         AND r.game_id = $1`,
+      [gameId]
+    );
+
+    // Pod-scoped data
+    await client.query(
+      `DELETE FROM pod_members pm
+       USING pods p
+       WHERE pm.pod_id = p.id
+         AND p.game_id = $1`,
+      [gameId]
+    );
+
+    await client.query('DELETE FROM pods WHERE game_id = $1', [gameId]);
+
+    // Player-scoped data
+    await client.query(
+      `DELETE FROM player_profiles pp
+       USING game_players gp
+       WHERE pp.game_player_id = gp.id
+         AND gp.game_id = $1`,
+      [gameId]
+    );
+
+    await client.query('DELETE FROM game_players WHERE game_id = $1', [gameId]);
+
+    // Rounds
+    await client.query('DELETE FROM rounds WHERE game_id = $1', [gameId]);
+
+    // Finally the game
+    const result = await client.query(
       'DELETE FROM games WHERE id = $1 RETURNING id, code',
       [gameId]
     );
 
     if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Game not found' });
     }
 
+    await client.query('COMMIT');
     res.json({
       ok: true,
       deleted_game_id: result.rows[0].id,
       deleted_code: result.rows[0].code,
     });
   } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
     console.error(err);
-    res.status(500).json({ error: 'Failed to delete game' });
+    res.status(500).json({ error: 'Failed to delete game', detail: err.message });
+  } finally {
+    client.release();
   }
 });
 

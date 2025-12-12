@@ -602,7 +602,7 @@
         let actionHtml = '';
         if (p.is_alive) {
           const confirmLabel = fullName;
-          actionHtml = `<button class="danger" onclick="markGhost(${p.id}, ${JSON.stringify(confirmLabel)})">Ghost 👻</button>`;
+          actionHtml = `<button class="danger" onclick='markGhost(${p.id}, ${JSON.stringify(confirmLabel)})'>Ghost 👻</button>`;
         }
 
         html += `<tr>

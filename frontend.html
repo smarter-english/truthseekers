@@ -137,22 +137,15 @@
     }
     .header-left {
       font-size: 13px;
+      align-self: flex-start;
     }
     .header-right {
       font-size: 12px;
       text-align: right;
-    }
-    #characterInfo {
-      margin-top: 4px;
-      display: none;
-      align-items: center;
-      gap: 6px;
-    }
-    #characterInfo.visible {
+      align-self: flex-end;
       display: flex;
-    }
-    #characterAvatar {
-      display: none; /* we now use the avatar as a header background instead */
+      flex-direction: column;
+      gap: 4px;
     }
     .header-title {
       font-weight: bold;
@@ -217,18 +210,18 @@
     <div id="playerView" class="hidden">
       <div id="headerBar">
         <div class="header-left">
-          <div class="header-title">Truthseekers</div>
+          <div class="header-title">Truthseekers by Smarter English</div>
           <div class="small">Code: <span id="viewGameCode"></span></div>
           <div class="small" id="roundPhaseLabel"></div>
+          <div style="margin-top:8px;">
+            <button id="showRoleBtn" type="button" onclick="showRole()">Show Role</button>
+            <span id="roleBadge"></span>
+          </div>
         </div>
         <div class="header-right">
           <div class="small">You: <span id="displayNameHeader"></span></div>
-          <div id="characterInfo" class="small">
-            <img id="characterAvatar" alt="Character avatar">
-            <span id="characterName"></span>
-          </div>
-          <button id="showRoleBtn" type="button" onclick="showRole()">Show Role</button>
-          <span id="roleBadge"></span>
+          <div class="small">Character: <span id="characterName"></span></div>
+          <button type="button" onclick="resetPlayer()">Leave game</button>
         </div>
       </div>
 
@@ -239,8 +232,6 @@
 
     <div id="phaseBanner" class="small hidden"></div>
 
-    <button onclick="reloadState()">Refresh</button>
-    <button onclick="resetPlayer()">Switch Player / Leave Game</button>
 
 
     <div id="rallySection" class="section-card hidden">
@@ -322,11 +313,9 @@
 }
 
   function updateCharacterUI(state) {
-    const infoEl = document.getElementById("characterInfo");
-    const avatarEl = document.getElementById("characterAvatar");
     const nameEl = document.getElementById("characterName");
     const headerEl = document.getElementById("headerBar");
-    if (!infoEl || !avatarEl || !nameEl || !headerEl || !state || !state.player) return;
+    if (!nameEl || !headerEl || !state || !state.player) return;
 
     // We expect the backend to eventually provide these fields on the player:
     // - character_name: the assigned character's name (e.g. "Anne Adams")
@@ -343,8 +332,8 @@
     }
 
     if (!charName && !avatarUrl) {
-      infoEl.classList.remove("visible");
       headerEl.style.backgroundImage = "";
+      nameEl.textContent = "";
       return;
     }
 
@@ -356,9 +345,6 @@
     } else {
       headerEl.style.backgroundImage = "";
     }
-
-    // Keep the character name visible under "You"
-    infoEl.classList.add("visible");
   }
 
   function formatName(displayName, characterName) {
@@ -766,7 +752,7 @@
       } else if (state.eligibleTargets && state.eligibleTargets.length > 0) {
         setActiveTab('voting');
       } else {
-        setActiveTab('interview');
+        setActiveTab('rally');
       }
     }
   } // <-- closes showPlayerView
@@ -793,18 +779,19 @@
             const label = formatName(m.display_name, m.character_name);
             return label + (m.is_alive ? "" : " 👻");
             })
-            .join(", ");
+            .join("<br>");
         } else {
             membersEl.textContent = "[no pod members?]";
         }
 
         section.classList.remove("hidden");
-    } else {
-        // No pod yet → hide entire section
-        membersEl.textContent = "";
-        section.classList.add("hidden");
+        } else {
+            // No pod yet (likely waiting for the teacher to start)
+            labelEl.textContent = "Please wait";
+            membersEl.textContent = "Please wait for the teacher to start the game.";
+            section.classList.remove("hidden");
+        }
     }
-}
 
   function setActiveTab(tab) {
     activeTab = tab;

@@ -28,7 +28,7 @@
       }
 
       .player-card.ghost {
-        opacity: 0.6;
+        opacity: 1;
       }
 
       .player-card img {
@@ -379,6 +379,7 @@
       let lastSavedInterviewName = "";
       let playerEliminationTimeoutId = null;
       let lastSeenEliminationSeq = 0;
+      let lastPodRenderKey = null;
 
       function prefillGameCodeFromQuery() {
         try {
@@ -609,6 +610,28 @@
         card.appendChild(names);
 
         return card;
+      }
+
+      function computePodRenderKey(state) {
+        try {
+          const podLabel =
+            state && state.pod && state.pod.label ? state.pod.label : "";
+          const members = (state && state.podMembers) || [];
+          const mKey = members
+            .map((m) => {
+              return [
+                m.id,
+                m.display_name,
+                m.character_name,
+                m.character_avatar_file,
+                m.is_alive,
+              ].join("|");
+            })
+            .join(";");
+          return `${podLabel}::${mKey}`;
+        } catch (e) {
+          return String(Date.now());
+        }
       }
 
       function showPlayerEliminationPopup(nameList) {
@@ -1047,16 +1070,20 @@
           }
           labelEl.textContent = rallyPoint;
 
-          // List pod members
-          if (state.podMembers && state.podMembers.length > 0) {
-            membersEl.innerHTML = "";
+          // List pod members (only re-render when changed to avoid flicker during polling)
+          const key = computePodRenderKey(state);
+          if (key !== lastPodRenderKey) {
+            lastPodRenderKey = key;
 
-            state.podMembers.forEach((m) => {
-              const card = createPlayerCard(m);
-              membersEl.appendChild(card);
-            });
-          } else {
-            membersEl.textContent = "[no pod members?]";
+            if (state.podMembers && state.podMembers.length > 0) {
+              membersEl.innerHTML = "";
+              state.podMembers.forEach((m) => {
+                const card = createPlayerCard(m);
+                membersEl.appendChild(card);
+              });
+            } else {
+              membersEl.textContent = "[no pod members?]";
+            }
           }
 
           section.classList.remove("hidden");

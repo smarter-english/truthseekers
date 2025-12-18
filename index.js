@@ -998,7 +998,8 @@ app.get('/me/current-state', async (req, res) => {
           `SELECT gp.id,
                   gp.display_name,
                   gp.is_alive,
-                  c.name AS character_name
+                  c.name AS character_name,
+                  c.avatar_file AS character_avatar_file
           FROM pod_members pm
           JOIN game_players gp ON gp.id = pm.game_player_id
           LEFT JOIN characters c ON c.id = gp.character_id
@@ -1010,7 +1011,9 @@ app.get('/me/current-state', async (req, res) => {
         const assignRes = await pool.query(
           `SELECT ia.interviewee_player_id,
                   gp.display_name,
-                  c.name AS character_name
+                  gp.is_alive,
+                  c.name AS character_name,
+                  c.avatar_file AS character_avatar_file
           FROM interview_assignments ia
           JOIN game_players gp ON gp.id = ia.interviewee_player_id
           LEFT JOIN characters c ON c.id = gp.character_id
@@ -1025,7 +1028,9 @@ app.get('/me/current-state', async (req, res) => {
           interviewTarget = {
             player_id: assignRes.rows[0].interviewee_player_id,
             display_name: assignRes.rows[0].display_name,
+            is_alive: assignRes.rows[0].is_alive,
             character_name: assignRes.rows[0].character_name,
+            character_avatar_file: assignRes.rows[0].character_avatar_file,
           };
         }
       }
@@ -1093,7 +1098,9 @@ app.get('/me/current-state', async (req, res) => {
     const tRes = await pool.query(
       `SELECT gp.id,
               gp.display_name,
-              c.name AS character_name
+              gp.is_alive,
+              c.name AS character_name,
+              c.avatar_file AS character_avatar_file
       FROM game_players gp
       LEFT JOIN characters c ON c.id = gp.character_id
       WHERE gp.game_id = $1

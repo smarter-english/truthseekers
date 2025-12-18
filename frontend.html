@@ -469,17 +469,43 @@
         // avatar
         const img = document.createElement("img");
 
-        let avatarFile = player.character_avatar_file;
-        if (
-          !player.is_alive &&
-          avatarFile &&
-          !avatarFile.startsWith("ghost_")
-        ) {
-          avatarFile = `ghost_${avatarFile}`;
+        // Match banner logic: prefer URL if provided; otherwise use local file under /assets/icons/
+        const useGhostAvatar = player && player.is_alive === false;
+
+        function ghostifyFilename(filename) {
+          if (!filename) return filename;
+          if (filename.startsWith("ghost_")) return filename;
+          return `ghost_${filename}`;
         }
 
-        if (avatarFile) {
-          img.src = `./assets/icons/${avatarFile}`;
+        function ghostifyUrl(url) {
+          try {
+            if (!url) return url;
+            const parts = url.split("/");
+            const last = parts.pop();
+            if (!last) return url;
+            parts.push(ghostifyFilename(last));
+            return parts.join("/");
+          } catch (e) {
+            return url;
+          }
+        }
+
+        let avatarUrl = "";
+        if (player.character_avatar_url) {
+          avatarUrl = useGhostAvatar
+            ? ghostifyUrl(player.character_avatar_url)
+            : player.character_avatar_url;
+        } else if (player.character_avatar_file) {
+          const file = useGhostAvatar
+            ? ghostifyFilename(player.character_avatar_file)
+            : player.character_avatar_file;
+          avatarUrl = `./assets/icons/${file}`;
+        }
+
+        if (avatarUrl) {
+          img.src = avatarUrl;
+          img.alt = player.character_name || "avatar";
         }
 
         // names

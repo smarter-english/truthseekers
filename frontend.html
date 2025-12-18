@@ -329,10 +329,39 @@
     const charName = state.player.character_name || "";
     let avatarUrl = "";
 
+    // If the player is eliminated, prefer a "ghost_" version of the avatar.
+    const useGhostAvatar = state.player && state.player.is_alive === false;
+
+    // Helper to prefix ghost_ to a filename only (not a whole path)
+    function ghostifyFilename(filename) {
+      if (!filename) return filename;
+      if (filename.startsWith("ghost_")) return filename;
+      return `ghost_${filename}`;
+    }
+
+    // Helper to prefix ghost_ to the basename of a URL/path
+    function ghostifyUrl(url) {
+      try {
+        if (!url) return url;
+        const parts = url.split("/");
+        const last = parts.pop();
+        if (!last) return url;
+        parts.push(ghostifyFilename(last));
+        return parts.join("/");
+      } catch (e) {
+        return url;
+      }
+    }
+
     if (state.player.character_avatar_url) {
-      avatarUrl = state.player.character_avatar_url;
+      avatarUrl = useGhostAvatar
+        ? ghostifyUrl(state.player.character_avatar_url)
+        : state.player.character_avatar_url;
     } else if (state.player.character_avatar_file) {
-      avatarUrl = `./assets/icons/${state.player.character_avatar_file}`;
+      const file = useGhostAvatar
+        ? ghostifyFilename(state.player.character_avatar_file)
+        : state.player.character_avatar_file;
+      avatarUrl = `./assets/icons/${file}`;
     }
 
     if (!charName && !avatarUrl) {

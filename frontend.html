@@ -308,6 +308,11 @@
         </div>
 
         <div id="phaseBanner" class="small hidden"></div>
+        <div
+          id="debugLog"
+          class="small hidden"
+          style="white-space: pre-wrap; margin: 8px 0"
+        ></div>
 
         <div id="rallySection" class="section-card hidden">
           <h3>Rally</h3>
@@ -389,6 +394,24 @@
         } catch (e) {
           console.error("Error pre-filling game code from URL", e);
         }
+      }
+
+      // --- lightweight in-page debug (use ?debug=1) ---
+      const DEBUG = (() => {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          return params.get("debug") === "1";
+        } catch (e) {
+          return false;
+        }
+      })();
+
+      function debugLog(msg) {
+        if (!DEBUG) return;
+        const el = document.getElementById("debugLog");
+        if (!el) return;
+        el.classList.remove("hidden");
+        el.textContent += (el.textContent ? "\n" : "") + String(msg);
       }
 
       function updateCharacterUI(state) {
@@ -504,8 +527,67 @@
         }
 
         if (avatarUrl) {
-          img.src = avatarUrl;
+          // Try a few variants because relative paths can behave differently depending on route.
+          const candidates = [];
+          candidates.push(avatarUrl);
+
+          // If it's a relative ./assets path, also try /assets
+          if (avatarUrl.startsWith("./assets/")) {
+            candidates.push(avatarUrl.replace("./assets/", "/assets/"));
+          }
+
+          // If it's an /assets path, also try ./assets
+          if (avatarUrl.startsWith("/assets/")) {
+            candidates.push("." + avatarUrl);
+          }
+
+          // If it isn't already absolute, try absolute against API
+          if (!/^https?:\/\//i.test(avatarUrl) && avatarUrl.startsWith("/")) {
+            candidates.push(`${API}${avatarUrl}`);
+          }
+          if (!/^https?:\/\//i.test(avatarUrl) && avatarUrl.startsWith("./")) {
+            candidates.push(`${API}${avatarUrl.substring(1)}`);
+          }
+
+          // De-dupe
+          const uniq = Array.from(new Set(candidates));
+          let idx = 0;
+
           img.alt = player.character_name || "avatar";
+          img.src = uniq[idx];
+
+          debugLog(
+            `card avatar for ${player.display_name || "?"}: ` +
+              JSON.stringify({
+                is_alive: player.is_alive,
+                character_avatar_url: player.character_avatar_url || null,
+                character_avatar_file: player.character_avatar_file || null,
+                chosen: avatarUrl,
+                tried: uniq,
+              })
+          );
+
+          img.onerror = () => {
+            idx += 1;
+            if (idx < uniq.length) {
+              img.src = uniq[idx];
+              return;
+            }
+            debugLog(
+              `FAILED avatar for ${player.display_name || "?"} after trying: ` +
+                uniq.join(", ")
+            );
+            img.onerror = null;
+          };
+        } else {
+          debugLog(
+            `NO avatar fields for ${player.display_name || "?"}: ` +
+              JSON.stringify({
+                is_alive: player.is_alive,
+                character_avatar_url: player.character_avatar_url || null,
+                character_avatar_file: player.character_avatar_file || null,
+              })
+          );
         }
 
         // names

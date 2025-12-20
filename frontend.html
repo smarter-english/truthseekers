@@ -1040,19 +1040,11 @@
 
         const roleBadge = document.getElementById("roleBadge");
         if (roleBadge) {
+          // Keep role hidden on load/reload. Only show when "Show Role" is pressed.
           roleBadge.textContent = state.player.role;
           roleBadge.className =
             state.player.role === "baddie" ? "baddie" : "goodie";
-
-          // Only show role automatically on FIRST load
-          if (!roleShownOnce) {
-            roleBadge.style.display = "inline-block";
-            if (roleTimeoutId) clearTimeout(roleTimeoutId);
-            roleTimeoutId = setTimeout(() => {
-              roleBadge.style.display = "none";
-            }, 1000);
-            roleShownOnce = true;
-          }
+          roleBadge.style.display = "none";
         }
 
         // remember IDs for later

@@ -321,6 +321,20 @@ async function assignCharactersAndProfiles(gameId) {
     [gameId]
   );
   const players = playersRes.rows;
+
+  // Attach per-player completion flags for teacher UI (current round only)
+for (const p of players) {
+  p.has_voted = !!votedByPlayer[p.id];
+
+  // Optional: include their chosen target if they voted
+  p.vote_target_id = null;
+  const vr = voteRecords.find((v) => v.voter_player_id === p.id);
+  if (vr) p.vote_target_id = vr.target_player_id;
+
+  p.saved_interviews_count = interviewCountsByPlayer[p.id] || 0;
+  p.has_saved_interview = p.saved_interviews_count > 0;
+}
+
   if (players.length === 0) return;
 
   // fetch all characters
@@ -609,6 +623,50 @@ async function getPlayerByToken(joinToken) {
     [joinToken]
   );
   return rows[0] || null;
+}
+
+// --- Win/lose logic ---
+// Expected DB field on games table:
+//   winning_side TEXT NULL  -- 'baddies' | 'goodies'
+// You can add it with:
+//   ALTER TABLE games ADD COLUMN IF NOT EXISTS winning_side TEXT;
+async function checkAndFinalizeGameIfNeeded(gameId) {
+  const countsRes = await pool.query(
+    `SELECT role, COUNT(*)::int AS count
+     FROM game_players
+     WHERE game_id = $1 AND is_alive = TRUE
+     GROUP BY role`,
+    [gameId]
+  );
+
+  let aliveBaddies = 0;
+  let aliveGoodies = 0;
+
+  for (const row of countsRes.rows) {
+    if (row.role === 'baddie') aliveBaddies = Number(row.count) || 0;
+    if (row.role === 'goodie') aliveGoodies = Number(row.count) || 0;
+  }
+
+  let winningSide = null;
+  if (aliveBaddies > aliveGoodies) {
+    winningSide = 'baddies';
+  } else if (aliveBaddies < 1) {
+    winningSide = 'goodies';
+  }
+
+  if (!winningSide) return null;
+
+  // Idempotent finalization
+  await pool.query(
+    `UPDATE games
+     SET status = 'finished',
+         winning_side = $2
+     WHERE id = $1
+       AND status <> 'finished'`,
+    [gameId, winningSide]
+  );
+
+  return winningSide;
 }
 
 // ---------- ROUTES ----------
@@ -914,7 +972,15 @@ app.get('/me/current-state', async (req, res) => {
   const gameRes = await pool.query('SELECT * FROM games WHERE id = $1', [
     player.game_id,
   ]);
-  const game = gameRes.rows[0];
+  let game = gameRes.rows[0];
+
+  // Safety: finalize game if win condition is already met
+  if (game && game.status === 'in_progress') {
+    await checkAndFinalizeGameIfNeeded(game.id);
+    const refreshed = await pool.query('SELECT * FROM games WHERE id = $1', [game.id]);
+    game = refreshed.rows[0];
+  }
+
   const currentSubround = game.current_subround || 1;
 
   let currentRound = null;
@@ -1127,6 +1193,7 @@ app.get('/me/current-state', async (req, res) => {
       id: game.id,
       code: game.code,
       status: game.status,
+      winning_side: game.winning_side || null,
       current_round: game.current_round,
     },
     currentRound,
@@ -1456,6 +1523,9 @@ app.post('/games/:gameId/players/:playerId/ghost', async (req, res) => {
       [playerId, gameId]
     );
 
+    // Auto-end the game if win conditions are met
+    await checkAndFinalizeGameIfNeeded(gameId);
+
     res.json({ ok: true, player_id: playerId, is_alive: false });
   } catch (err) {
     console.error(err);
@@ -1498,6 +1568,44 @@ app.get('/games/:id/debug', async (req, res) => {
     [gameId, game.current_round]
   );
   const round = roundRes.rows[0] || null;
+
+  // Raw completion signals for teacher UI
+let voteRecords = [];
+let interviewRecords = [];
+let interviewCountsByPlayer = {};
+let votedByPlayer = {};
+
+if (round) {
+  // One vote per voter per round (raw records so we can mark who voted)
+  const vr = await pool.query(
+    `SELECT voter_player_id, target_player_id, created_at
+     FROM votes
+     WHERE round_id = $1`,
+    [round.id]
+  );
+  voteRecords = vr.rows;
+  votedByPlayer = voteRecords.reduce((acc, v) => {
+    acc[v.voter_player_id] = true;
+    return acc;
+  }, {});
+
+  // Interviews saved by each interviewer in this round (raw records)
+  const ir = await pool.query(
+    `SELECT id AS interview_id,
+            interviewer_player_id,
+            interviewee_player_id,
+            created_at
+     FROM interviews
+     WHERE round_id = $1`,
+    [round.id]
+  );
+  interviewRecords = ir.rows;
+
+  interviewCountsByPlayer = interviewRecords.reduce((acc, i) => {
+    acc[i.interviewer_player_id] = (acc[i.interviewer_player_id] || 0) + 1;
+    return acc;
+  }, {});
+}
 
   // pods & members
   let pods = [];
@@ -1565,13 +1673,15 @@ app.get('/games/:id/debug', async (req, res) => {
   }
 
   res.json({
-    game,
-    players,
-    round,
-    pods,
-    assignments,
-    votes
-  });
+  game,
+  players,
+  round,
+  pods,
+  assignments,
+  votes,
+  voteRecords,
+  interviewRecords
+});
 });
 
 // ----------------------------

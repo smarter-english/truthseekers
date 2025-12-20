@@ -322,18 +322,6 @@ async function assignCharactersAndProfiles(gameId) {
   );
   const players = playersRes.rows;
 
-  // Attach per-player completion flags for teacher UI (current round only)
-for (const p of players) {
-  p.has_voted = !!votedByPlayer[p.id];
-
-  // Optional: include their chosen target if they voted
-  p.vote_target_id = null;
-  const vr = voteRecords.find((v) => v.voter_player_id === p.id);
-  if (vr) p.vote_target_id = vr.target_player_id;
-
-  p.saved_interviews_count = interviewCountsByPlayer[p.id] || 0;
-  p.has_saved_interview = p.saved_interviews_count > 0;
-}
 
   if (players.length === 0) return;
 
@@ -1606,6 +1594,20 @@ if (round) {
     return acc;
   }, {});
 }
+
+  // Attach per-player completion flags for teacher UI (current round only)
+  // Canonical sources of truth:
+  // - voted: presence of a row in `votes` for (round_id, voter_player_id)
+  // - interview saved: presence of a row in `interviews` for (round_id, interviewer_player_id)
+  for (const p of players) {
+    p.has_voted = !!votedByPlayer[p.id];
+    p.vote_target_id = null;
+    const vr1 = voteRecords.find((v) => v.voter_player_id === p.id);
+    if (vr1) p.vote_target_id = vr1.target_player_id;
+
+    p.saved_interviews_count = interviewCountsByPlayer[p.id] || 0;
+    p.has_saved_interview = p.saved_interviews_count > 0;
+  }
 
   // pods & members
   let pods = [];

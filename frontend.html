@@ -298,7 +298,14 @@
           <div class="header-right">
             <div class="small">You: <span id="displayNameHeader"></span></div>
             <div class="small">Character: <span id="characterName"></span></div>
-            <button type="button" onclick="resetPlayer()">Leave game</button>
+            <button
+              id="leaveGameBtn"
+              type="button"
+              class="hidden"
+              onclick="resetPlayer()"
+            >
+              Leave game
+            </button>
           </div>
         </div>
 
@@ -379,6 +386,7 @@
       let lastSavedInterviewName = "";
       let playerEliminationTimeoutId = null;
       let lastSeenEliminationSeq = 0;
+      let lastSeenForceLogoutSeq = 0;
       let lastPodRenderKey = null;
 
       function prefillGameCodeFromQuery() {
@@ -653,6 +661,67 @@
           popup.classList.remove("show");
         }, 3000);
       }
+      function getForceLogoutSeq(state) {
+        if (!state) return null;
+
+        // Be flexible in case you name it differently on backend
+        const seq =
+          state.forceLogoutSeq ??
+          (state.game && state.game.forceLogoutSeq) ??
+          state.force_logout_seq ??
+          (state.game && state.game.force_logout_seq);
+
+        return typeof seq === "number" ? seq : null;
+      }
+
+      function handleForceLogoutIfNeeded(state) {
+        const seq = getForceLogoutSeq(state);
+        if (seq === null) return false;
+
+        if (seq > lastSeenForceLogoutSeq) {
+          lastSeenForceLogoutSeq = seq;
+
+          // Clear local identity and return to join screen (NO confirm)
+          localStorage.removeItem("truthseekers-token");
+          localStorage.removeItem("truthseekers-gamecode");
+
+          joinToken = null;
+          currentGameCode = null;
+          currentRoundId = null;
+          currentSubround = null;
+          currentPlayerId = null;
+          currentInterviewTarget = null;
+          savedInterviews = [];
+          lastState = null;
+          roleShownOnce = false;
+          lastPhase = null;
+          lastVoteTargetId = null;
+          lastVoteTargetName = "";
+          lastSavedInterviewPartnerId = null;
+          lastSavedInterviewName = "";
+          lastSeenEliminationSeq = 0;
+          lastPodRenderKey = null;
+
+          // Reset UI
+          document.getElementById("playerView")?.classList.add("hidden");
+          document.getElementById("joinForm")?.classList.remove("hidden");
+          const titleEl = document.querySelector("#container h1");
+          if (titleEl) titleEl.classList.remove("hidden");
+
+          const nameEl = document.getElementById("playerName");
+          if (nameEl) nameEl.value = "";
+          document.getElementById("interviewQuestions").innerHTML = "";
+          document.getElementById("feedbackContent").innerHTML = "";
+          document.getElementById("currentVote").textContent = "";
+          const statusDiv = document.getElementById("interviewStatus");
+          if (statusDiv) statusDiv.textContent = "";
+
+          alert("This device has been reset by the teacher.");
+          return true;
+        }
+
+        return false;
+      }
 
       // --- Interview persistence helpers ---
       function persistInterviewDraft(questionId, value) {
@@ -777,6 +846,8 @@
         lastSavedInterviewPartnerId = null;
         lastSavedInterviewName = "";
         lastSeenEliminationSeq = 0;
+        lastSeenForceLogoutSeq = 0;
+        lastPodRenderKey = null;
 
         document.getElementById("playerView").classList.add("hidden");
         document.getElementById("joinForm").classList.remove("hidden");
@@ -796,6 +867,8 @@
         const prevRoundId = currentRoundId;
         const prevPartnerId =
           currentInterviewTarget && currentInterviewTarget.player_id;
+
+        if (handleForceLogoutIfNeeded(state)) return;
 
         // Global elimination event from backend
         const event = state.eliminationEvent;
@@ -927,6 +1000,7 @@
       }
 
       function showPlayerView(state) {
+        if (handleForceLogoutIfNeeded(state)) return;
         const titleEl = document.querySelector("#container h1");
         if (titleEl) titleEl.classList.add("hidden");
         document.getElementById("joinForm").classList.add("hidden");

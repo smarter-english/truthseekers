@@ -1114,6 +1114,7 @@ app.get('/me/current-state', async (req, res) => {
 
   res.json({
     phase: game.phase,
+    forceLogoutSeq: game.force_logout_seq || 0,
     player: {
       id: player.id,
       display_name: player.display_name,
@@ -1327,6 +1328,36 @@ app.post('/games/:id/subround', async (req, res) => {
   );
 
   res.json({ ok: true, game_id: gameId, current_subround: subround });
+});
+// teacher: force-reset all player devices (clients clear localStorage when seq increases)
+// Requires DB migration:
+//   ALTER TABLE games ADD COLUMN IF NOT EXISTS force_logout_seq INTEGER DEFAULT 0;
+app.post('/games/:id/force-logout', async (req, res) => {
+  const gameId = Number(req.params.id);
+  if (!gameId) {
+    return res.status(400).json({ error: 'Invalid game id' });
+  }
+
+  try {
+    const gameRes = await pool.query('SELECT id FROM games WHERE id = $1', [gameId]);
+    const game = gameRes.rows[0];
+    if (!game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    const upd = await pool.query(
+      `UPDATE games
+       SET force_logout_seq = COALESCE(force_logout_seq, 0) + 1
+       WHERE id = $1
+       RETURNING force_logout_seq`,
+      [gameId]
+    );
+
+    res.json({ ok: true, game_id: gameId, force_logout_seq: upd.rows[0].force_logout_seq });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to force logout devices', detail: err.message });
+  }
 });
 
 // teacher: create next round (increment round, regenerate pods & mutations)

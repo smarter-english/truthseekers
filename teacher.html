@@ -1,246 +1,276 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <title>Truthseekers Teacher Dashboard</title>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      margin: 20px;
-      background: #f5f5f5;
-    }
-    h1 {
-      margin-bottom: 10px;
-    }
-    #games {
-      margin-bottom: 20px;
-    }
-    .game-card {
-      background: #ffffff;
-      border-radius: 6px;
-      padding: 10px 12px;
-      margin-bottom: 10px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-    .game-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .game-meta {
-      font-size: 12px;
-      color: #555;
-    }
-    button {
-      margin: 2px;
-      padding: 4px 8px;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    button.primary {
-      background: #1976d2;
-      color: white;
-      border: none;
-      border-radius: 3px;
-    }
-    button.secondary {
-      background: #eeeeee;
-      border: 1px solid #cccccc;
-      border-radius: 3px;
-    }
-    button.danger {
-      background: #d32f2f;
-      color: white;
-      border: none;
-      border-radius: 3px;
-    }
-    #debugView {
-      margin-top: 20px;
-    }
-    .section {
-      background: #ffffff;
-      border-radius: 6px;
-      padding: 10px 12px;
-      margin-bottom: 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-    .section h2 {
-      margin-top: 0;
-      font-size: 18px;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      font-size: 12px;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 4px 6px;
-      text-align: left;
-    }
-    th {
-      background: #f0f0f0;
-    }
-    .badge {
-      display: inline-block;
-      padding: 1px 6px;
-      border-radius: 10px;
-      font-size: 10px;
-      background: #eee;
-    }
-    .badge.goodie {
-      background: #c8e6c9;
-      color: #1b5e20;
-    }
-    .badge.baddie {
-      background: #ffcdd2;
-      color: #b71c1c;
-    }
-    .badge.dead {
-      background: #eeeeee;
-      color: #757575;
-      text-decoration: line-through;
-    }
-    .pod-label {
-      font-weight: bold;
-      margin-top: 4px;
-    }
-    .small {
-      font-size: 11px;
-      color: #666;
-    }
-    #eliminationPopup {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.85);
-      color: #fff;
-      padding: 12px 18px;
-      border-radius: 8px;
-      font-size: 16px;
-      display: none;
-      z-index: 9999;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      text-align: center;
-    }
-    #eliminationPopup.show {
-      display: block;
-      animation: fadeSlideDown 0.25s ease-out, fadeOut 0.4s ease-out 2.6s forwards;
-    }
-    #eliminationPopup .skull {
-      font-size: 32px;
-      margin-right: 8px;
-      vertical-align: middle;
-    }
-    #eliminationPopup .message {
-      font-weight: 700;
-      text-transform: uppercase;
-      vertical-align: middle;
-    }
-    @keyframes fadeSlideDown {
-      from { opacity: 0; transform: translate(-50%, -10px); }
-      to { opacity: 1; transform: translate(-50%, 0); }
-    }
-    @keyframes fadeOut {
-      from { opacity: 1; transform: translate(-50%, 0); }
-      to { opacity: 0; transform: translate(-50%, -10px); }
-    }
-    #statusBar {
-      margin-bottom: 10px;
-      font-size: 12px;
-      color: #555;
-    }
-  </style>
-</head>
-<body>
-  <h1>Truthseekers – Teacher Dashboard</h1>
-  <div id="statusBar">API: <span id="apiUrl"></span></div>
-  <div id="eliminationPopup">
-    <span class="skull">☠️</span>
-    <span class="message" id="eliminationMessage"></span>
-  </div>
-
-  <div id="games" class="section">
-    <h2>Games</h2>
-    <button class="secondary" onclick="createGame()">+ New Game</button>
-    <button class="secondary" onclick="loadGames()">Refresh</button>
-    <div id="gamesList"></div>
-  </div>
-
-    <div id="debugView" class="section" style="display:none;">
-    <h2>Game Detail</h2>
-    <div id="gameInfo"></div>
-    <div style="margin-top:10px;">
-      <div class="small">Student join link:</div>
-      <div id="joinLink" class="small" style="word-break: break-all;"></div>
-      <div style="margin-top:6px;">
-        <div class="small">Scan to join:</div>
-        <div id="qrContainer"></div>
-      </div>
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <title>Truthseekers Teacher Dashboard</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        margin: 20px;
+        background: #f5f5f5;
+      }
+      h1 {
+        margin-bottom: 10px;
+      }
+      #games {
+        margin-bottom: 20px;
+      }
+      .game-card {
+        background: #ffffff;
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      .game-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .game-meta {
+        font-size: 12px;
+        color: #555;
+      }
+      button {
+        margin: 2px;
+        padding: 4px 8px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #1976d2;
+        color: white;
+        border: none;
+        border-radius: 3px;
+      }
+      button.secondary {
+        background: #eeeeee;
+        border: 1px solid #cccccc;
+        border-radius: 3px;
+      }
+      button.danger {
+        background: #d32f2f;
+        color: white;
+        border: none;
+        border-radius: 3px;
+      }
+      #debugView {
+        margin-top: 20px;
+      }
+      .section {
+        background: #ffffff;
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      .section h2 {
+        margin-top: 0;
+        font-size: 18px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12px;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 4px 6px;
+        text-align: left;
+      }
+      th {
+        background: #f0f0f0;
+      }
+      .badge {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 10px;
+        font-size: 10px;
+        background: #eee;
+      }
+      .badge.goodie {
+        background: #c8e6c9;
+        color: #1b5e20;
+      }
+      .badge.baddie {
+        background: #ffcdd2;
+        color: #b71c1c;
+      }
+      .badge.dead {
+        background: #eeeeee;
+        color: #757575;
+        text-decoration: line-through;
+      }
+      .pod-label {
+        font-weight: bold;
+        margin-top: 4px;
+      }
+      .small {
+        font-size: 11px;
+        color: #666;
+      }
+      #eliminationPopup {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.85);
+        color: #fff;
+        padding: 12px 18px;
+        border-radius: 8px;
+        font-size: 16px;
+        display: none;
+        z-index: 9999;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        text-align: center;
+      }
+      #eliminationPopup.show {
+        display: block;
+        animation: fadeSlideDown 0.25s ease-out,
+          fadeOut 0.4s ease-out 2.6s forwards;
+      }
+      #eliminationPopup .skull {
+        font-size: 32px;
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+      #eliminationPopup .message {
+        font-weight: 700;
+        text-transform: uppercase;
+        vertical-align: middle;
+      }
+      @keyframes fadeSlideDown {
+        from {
+          opacity: 0;
+          transform: translate(-50%, -10px);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
+      }
+      @keyframes fadeOut {
+        from {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
+        to {
+          opacity: 0;
+          transform: translate(-50%, -10px);
+        }
+      }
+      #statusBar {
+        margin-bottom: 10px;
+        font-size: 12px;
+        color: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Truthseekers – Teacher Dashboard</h1>
+    <div id="statusBar">API: <span id="apiUrl"></span></div>
+    <div id="eliminationPopup">
+      <span class="skull">☠️</span>
+      <span class="message" id="eliminationMessage"></span>
     </div>
-        <div style="margin-top:8px;">
-  <button class="secondary" onclick="setPhase('rally')">Rally</button>
-  <button class="secondary" onclick="setPhase('interview1')">Interview 1</button>
-  <button class="secondary" onclick="setPhase('interview2')">Interview 2</button>
-  <button class="secondary" onclick="setPhase('feedback')">Feedback</button>
-  <button class="secondary" onclick="setPhase('voting')">Voting</button>
-  <button class="secondary" onclick="nextRound()">Next Round</button>
-  <button class="secondary" id="toggleRolesBtn" onclick="toggleRoles()">Show roles</button>
-  <button class="secondary" onclick="refreshDebug()">Refresh Debug</button>
-</div>
 
-    <h3>Players</h3>
-    <div id="playersTable"></div>
+    <div id="games" class="section">
+      <h2>Games</h2>
+      <button class="secondary" onclick="createGame()">+ New Game</button>
+      <button class="secondary" onclick="loadGames()">Refresh</button>
+      <div id="gamesList"></div>
+    </div>
 
-    <h3>Pods</h3>
-    <div id="podsView"></div>
+    <div id="debugView" class="section" style="display: none">
+      <h2>Game Detail</h2>
+      <div id="gameInfo"></div>
+      <div style="margin-top: 10px">
+        <div class="small">Student join link:</div>
+        <div id="joinLink" class="small" style="word-break: break-all"></div>
+        <div style="margin-top: 6px">
+          <div class="small">Scan to join:</div>
+          <div id="qrContainer"></div>
+        </div>
+      </div>
+      <div style="margin-top: 8px">
+        <button class="secondary" onclick="setPhase('rally')">Rally</button>
+        <button class="secondary" onclick="setPhase('interview1')">
+          Interview 1
+        </button>
+        <button class="secondary" onclick="setPhase('interview2')">
+          Interview 2
+        </button>
+        <button class="secondary" onclick="setPhase('feedback')">
+          Feedback
+        </button>
+        <button class="secondary" onclick="setPhase('voting')">Voting</button>
+        <button class="secondary" onclick="nextRound()">Next Round</button>
+        <button class="secondary" id="toggleRolesBtn" onclick="toggleRoles()">
+          Show roles
+        </button>
+        <button class="secondary" onclick="refreshDebug()">
+          Refresh Debug
+        </button>
+        <button class="danger" onclick="forceLogoutAll()">
+          Reset all devices
+        </button>
+      </div>
 
-    <h3>Interview Assignments</h3>
-    <div id="assignmentsView"></div>
+      <h3>Players</h3>
+      <div id="playersTable"></div>
 
-    <h3>Votes</h3>
-    <div id="votesView"></div>
-  </div>
+      <h3>Pods</h3>
+      <div id="podsView"></div>
 
-<script>
-  const API = window.location.origin;
-  document.getElementById("apiUrl").textContent = API;
+      <h3>Interview Assignments</h3>
+      <div id="assignmentsView"></div>
 
-  let currentGameId = null;
-  let currentDebugData = null;
-  let previousPlayerStatus = {};
-  let eliminationTimeoutId = null;
-  let showRoles = false;
+      <h3>Votes</h3>
+      <div id="votesView"></div>
+    </div>
 
-  async function loadGames() {
-    const gamesListDiv = document.getElementById("gamesList");
-    gamesListDiv.innerHTML = "Loading games…";
+    <script>
+      const API = window.location.origin;
+      document.getElementById("apiUrl").textContent = API;
 
-    try {
-      const res = await fetch(API + "/games");
-      if (!res.ok) {
-        gamesListDiv.innerHTML = "Error loading games.";
-        return;
-      }
-      const games = await res.json();
-      if (!games.length) {
-        gamesListDiv.innerHTML = "<p>No games found. Create one!</p>";
-        return;
-      }
+      let currentGameId = null;
+      let currentDebugData = null;
+      let previousPlayerStatus = {};
+      let eliminationTimeoutId = null;
+      let showRoles = false;
 
-      gamesListDiv.innerHTML = "";
-      games.forEach(game => {
-        const div = document.createElement("div");
-        div.className = "game-card";
+      async function loadGames() {
+        const gamesListDiv = document.getElementById("gamesList");
+        gamesListDiv.innerHTML = "Loading games…";
 
-        const header = document.createElement("div");
-        header.className = "game-header";
+        try {
+          const res = await fetch(API + "/games");
+          if (!res.ok) {
+            gamesListDiv.innerHTML = "Error loading games.";
+            return;
+          }
+          const games = await res.json();
+          if (!games.length) {
+            gamesListDiv.innerHTML = "<p>No games found. Create one!</p>";
+            return;
+          }
 
-        const left = document.createElement("div");
-        left.innerHTML = `
-          <div><strong>Game ${game.id}</strong> – Code: <code>${game.code}</code></div>
+          gamesListDiv.innerHTML = "";
+          games.forEach((game) => {
+            const div = document.createElement("div");
+            div.className = "game-card";
+
+            const header = document.createElement("div");
+            header.className = "game-header";
+
+            const left = document.createElement("div");
+            left.innerHTML = `
+          <div><strong>Game ${game.id}</strong> – Code: <code>${
+              game.code
+            }</code></div>
           <div class="game-meta">
             Status: ${game.status}
             &nbsp;•&nbsp; Round: ${game.current_round || "-"}
@@ -248,283 +278,337 @@
           </div>
         `;
 
-        const right = document.createElement("div");
-        const debugBtn = document.createElement("button");
-        debugBtn.className = "primary";
-        debugBtn.textContent = "Open";
-        debugBtn.onclick = () => openDebug(game.id);
+            const right = document.createElement("div");
+            const debugBtn = document.createElement("button");
+            debugBtn.className = "primary";
+            debugBtn.textContent = "Open";
+            debugBtn.onclick = () => openDebug(game.id);
 
-        const startBtn = document.createElement("button");
-        startBtn.className = "secondary";
-        startBtn.textContent = "Start Game";
-        startBtn.onclick = () => startGame(game.id);
+            const startBtn = document.createElement("button");
+            startBtn.className = "secondary";
+            startBtn.textContent = "Start Game";
+            startBtn.onclick = () => startGame(game.id);
 
-        right.appendChild(debugBtn);
-        right.appendChild(startBtn);
-        const deleteBtn = document.createElement("button");
-        deleteBtn.className = "danger";
-        deleteBtn.textContent = "Delete";
-        deleteBtn.onclick = async () => {
-          if (!confirm(`Delete game ${game.id} (${game.code})? This cannot be undone.`)) return;
-          try {
-            const res = await fetch(API + `/games/${game.id}`, { method: "DELETE" });
-            if (!res.ok) {
-              const text = await res.text();
-              console.error(text);
-              alert("Could not delete game: " + text);
-              return;
-            }
-            // If we're viewing this game, hide the debug panel
-            if (currentGameId === game.id) {
-              currentGameId = null;
-              currentDebugData = null;
-              document.getElementById("debugView").style.display = "none";
-            }
-            await loadGames();
-          } catch (err) {
-            console.error(err);
-            alert("Error deleting game (see console).");
-          }
-        };
-        right.appendChild(deleteBtn);
+            right.appendChild(debugBtn);
+            right.appendChild(startBtn);
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "danger";
+            deleteBtn.textContent = "Delete";
+            deleteBtn.onclick = async () => {
+              if (
+                !confirm(
+                  `Delete game ${game.id} (${game.code})? This cannot be undone.`
+                )
+              )
+                return;
+              try {
+                const res = await fetch(API + `/games/${game.id}`, {
+                  method: "DELETE",
+                });
+                if (!res.ok) {
+                  const text = await res.text();
+                  console.error(text);
+                  alert("Could not delete game: " + text);
+                  return;
+                }
+                // If we're viewing this game, hide the debug panel
+                if (currentGameId === game.id) {
+                  currentGameId = null;
+                  currentDebugData = null;
+                  document.getElementById("debugView").style.display = "none";
+                }
+                await loadGames();
+              } catch (err) {
+                console.error(err);
+                alert("Error deleting game (see console).");
+              }
+            };
+            right.appendChild(deleteBtn);
 
-        header.appendChild(left);
-        header.appendChild(right);
+            header.appendChild(left);
+            header.appendChild(right);
 
-        div.appendChild(header);
-        gamesListDiv.appendChild(div);
-      });
-
-    } catch (err) {
-      console.error(err);
-      gamesListDiv.innerHTML = "Error loading games (see console).";
-    }
-  }
-
-  async function createGame() {
-    try {
-      const res = await fetch(API + "/games", { method: "POST" });
-      if (!res.ok) {
-        alert("Could not create game");
-        return;
-      }
-      await loadGames();
-    } catch (err) {
-      console.error(err);
-      alert("Error creating game (see console).");
-    }
-  }
-
-  async function startGame(gameId) {
-    if (!confirm("Start game " + gameId + "? This will assign roles and start round 1.")) return;
-    try {
-      const res = await fetch(API + `/games/${gameId}/start`, {
-        method: "POST"
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(text);
-        alert("Could not start game: " + text);
-        return;
-      }
-      await loadGames();
-      await openDebug(gameId);
-    } catch (err) {
-      console.error(err);
-      alert("Error starting game (see console).");
-    }
-  }
-
-  async function openDebug(gameId) {
-    currentGameId = gameId;
-    document.getElementById("debugView").style.display = "block";
-    await refreshDebug();
-  }
-
-  async function refreshDebug() {
-    if (!currentGameId) return;
-    try {
-      const res = await fetch(API + `/games/${currentGameId}/debug`);
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(text);
-        alert("Could not load debug info: " + text);
-        return;
-      }
-      const data = await res.json();
-      currentDebugData = data;
-      renderDebug(data);
-    } catch (err) {
-      console.error(err);
-      alert("Error loading debug info (see console).");
-    }
-  }
-
-  async function setSubround(subround) {
-    if (!currentGameId) return;
-    try {
-      const res = await fetch(API + `/games/${currentGameId}/subround`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subround })
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(text);
-        alert("Could not set subround: " + text);
-        return;
-      }
-      await refreshDebug();
-      await loadGames();
-    } catch (err) {
-      console.error(err);
-      alert("Error setting subround (see console).");
-    }
-  }
-
-  async function setPhase(phase) {
-    if (!currentGameId) return;
-    try {
-      const res = await fetch(API + `/games/${currentGameId}/phase`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phase })
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(text);
-        alert("Could not set phase: " + text);
-        return;
-      }
-      await refreshDebug();
-      await loadGames();
-    } catch (err) {
-      console.error(err);
-      alert("Error setting phase (see console).");
-    }
-  }
-
-    async function nextRound() {
-    if (!currentGameId) return;
-    if (!confirm("Create next round for game " + currentGameId + "?")) return;
-
-    try {
-      const res = await fetch(API + `/games/${currentGameId}/next-round`, {
-        method: "POST"
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(text);
-        alert("Could not create next round: " + text);
-        return;
-      }
-      await refreshDebug();
-      await loadGames();
-    } catch (err) {
-      console.error(err);
-      alert("Error creating next round (see console).");
-    }
-  }
-
-  async function markGhost(playerId, playerLabel) {
-    if (!currentGameId) return;
-    const label = playerLabel || ("player " + playerId);
-    if (!confirm("Mark " + label + " as a ghost?")) return;
-
-    try {
-      const res = await fetch(API + `/games/${currentGameId}/players/${playerId}/ghost`, {
-        method: "POST"
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(text);
-        alert("Could not mark player as ghost: " + text);
-        return;
-      }
-      await refreshDebug();
-      await loadGames();
-    } catch (err) {
-      console.error(err);
-      alert("Error marking player as ghost (see console).");
-    }
-  }
-
-    function toggleRoles() {
-    showRoles = !showRoles;
-    const btn = document.getElementById("toggleRolesBtn");
-    if (btn) {
-      btn.textContent = showRoles ? "Hide roles" : "Show roles";
-    }
-    if (currentDebugData) {
-      renderDebug(currentDebugData);
-    }
-  }
-
-  function showEliminationPopup(nameList) {
-    const popup = document.getElementById("eliminationPopup");
-    const msgEl = document.getElementById("eliminationMessage");
-    if (!popup || !msgEl) return;
-
-    msgEl.textContent = `${nameList} has been eliminated.`;
-    // restart animation
-    popup.classList.remove("show");
-    void popup.offsetWidth;
-    popup.classList.add("show");
-
-    if (eliminationTimeoutId) {
-      clearTimeout(eliminationTimeoutId);
-    }
-    // hide after ~3 seconds
-    eliminationTimeoutId = setTimeout(() => {
-      popup.classList.remove("show");
-    }, 3000);
-  }
-
-  function formatDebugName(displayName, characterName) {
-    if (characterName) {
-      return `${displayName} (${characterName})`;
-    }
-    return displayName;
-  }
-
-  function renderDebug(data) {
-    // Detect newly eliminated players (alive -> out) and show popup
-    const prev = previousPlayerStatus || {};
-    const newlyEliminated = [];
-    if (data.players && Array.isArray(data.players)) {
-      data.players.forEach(p => {
-        const prevEntry = prev[p.id];
-        if (prevEntry && prevEntry.is_alive && !p.is_alive) {
-          newlyEliminated.push(p.display_name);
+            div.appendChild(header);
+            gamesListDiv.appendChild(div);
+          });
+        } catch (err) {
+          console.error(err);
+          gamesListDiv.innerHTML = "Error loading games (see console).";
         }
-      });
-      // update stored status
-      previousPlayerStatus = {};
-      data.players.forEach(p => {
-        previousPlayerStatus[p.id] = { is_alive: p.is_alive };
-      });
-    }
-    if (newlyEliminated.length > 0) {
-      const nameList = newlyEliminated.join(", ");
-      showEliminationPopup(nameList);
-    }
-    // Build lookup maps for player labels
-    const playersById = {};
-    const playerLabelById = {};
-    if (data.players && Array.isArray(data.players)) {
-      data.players.forEach(p => {
-        playersById[p.id] = p;
-        playerLabelById[p.id] = formatDebugName(p.display_name, p.character_name);
-      });
-    }
+      }
 
-    // Game info
-    const gameInfoDiv = document.getElementById("gameInfo");
-    const g = data.game;
-    const roundText = g.current_round || "-";
-    const subroundText = g.current_subround || "-";
-    const phaseText = data.phase || data.game.phase || g.phase || "-";
-    gameInfoDiv.innerHTML = `
+      async function createGame() {
+        try {
+          const res = await fetch(API + "/games", { method: "POST" });
+          if (!res.ok) {
+            alert("Could not create game");
+            return;
+          }
+          await loadGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error creating game (see console).");
+        }
+      }
+
+      async function startGame(gameId) {
+        if (
+          !confirm(
+            "Start game " +
+              gameId +
+              "? This will assign roles and start round 1."
+          )
+        )
+          return;
+        try {
+          const res = await fetch(API + `/games/${gameId}/start`, {
+            method: "POST",
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(text);
+            alert("Could not start game: " + text);
+            return;
+          }
+          await loadGames();
+          await openDebug(gameId);
+        } catch (err) {
+          console.error(err);
+          alert("Error starting game (see console).");
+        }
+      }
+
+      async function openDebug(gameId) {
+        currentGameId = gameId;
+        document.getElementById("debugView").style.display = "block";
+        await refreshDebug();
+      }
+
+      async function refreshDebug() {
+        if (!currentGameId) return;
+        try {
+          const res = await fetch(API + `/games/${currentGameId}/debug`);
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(text);
+            alert("Could not load debug info: " + text);
+            return;
+          }
+          const data = await res.json();
+          currentDebugData = data;
+          renderDebug(data);
+        } catch (err) {
+          console.error(err);
+          alert("Error loading debug info (see console).");
+        }
+      }
+
+      async function setSubround(subround) {
+        if (!currentGameId) return;
+        try {
+          const res = await fetch(API + `/games/${currentGameId}/subround`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subround }),
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(text);
+            alert("Could not set subround: " + text);
+            return;
+          }
+          await refreshDebug();
+          await loadGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error setting subround (see console).");
+        }
+      }
+
+      async function setPhase(phase) {
+        if (!currentGameId) return;
+        try {
+          const res = await fetch(API + `/games/${currentGameId}/phase`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phase }),
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(text);
+            alert("Could not set phase: " + text);
+            return;
+          }
+          await refreshDebug();
+          await loadGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error setting phase (see console).");
+        }
+      }
+
+      async function nextRound() {
+        if (!currentGameId) return;
+        if (!confirm("Create next round for game " + currentGameId + "?"))
+          return;
+
+        try {
+          const res = await fetch(API + `/games/${currentGameId}/next-round`, {
+            method: "POST",
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(text);
+            alert("Could not create next round: " + text);
+            return;
+          }
+          await refreshDebug();
+          await loadGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error creating next round (see console).");
+        }
+      }
+
+      async function forceLogoutAll() {
+        if (!currentGameId) return;
+        if (
+          !confirm(
+            "Reset ALL devices for this game? This will kick everyone to the join screen and clear saved logins on their iPads within ~3 seconds."
+          )
+        )
+          return;
+
+        try {
+          const res = await fetch(
+            API + `/games/${currentGameId}/force-logout`,
+            {
+              method: "POST",
+            }
+          );
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(text);
+            alert("Could not reset devices: " + text);
+            return;
+          }
+          const out = await res.json();
+          alert(
+            `Reset signal sent (seq: ${out.force_logout_seq}). Players will reset on their next poll.`
+          );
+          await refreshDebug();
+          await loadGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error resetting devices (see console). ");
+        }
+      }
+
+      async function markGhost(playerId, playerLabel) {
+        if (!currentGameId) return;
+        const label = playerLabel || "player " + playerId;
+        if (!confirm("Mark " + label + " as a ghost?")) return;
+
+        try {
+          const res = await fetch(
+            API + `/games/${currentGameId}/players/${playerId}/ghost`,
+            {
+              method: "POST",
+            }
+          );
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(text);
+            alert("Could not mark player as ghost: " + text);
+            return;
+          }
+          await refreshDebug();
+          await loadGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error marking player as ghost (see console).");
+        }
+      }
+
+      function toggleRoles() {
+        showRoles = !showRoles;
+        const btn = document.getElementById("toggleRolesBtn");
+        if (btn) {
+          btn.textContent = showRoles ? "Hide roles" : "Show roles";
+        }
+        if (currentDebugData) {
+          renderDebug(currentDebugData);
+        }
+      }
+
+      function showEliminationPopup(nameList) {
+        const popup = document.getElementById("eliminationPopup");
+        const msgEl = document.getElementById("eliminationMessage");
+        if (!popup || !msgEl) return;
+
+        msgEl.textContent = `${nameList} has been eliminated.`;
+        // restart animation
+        popup.classList.remove("show");
+        void popup.offsetWidth;
+        popup.classList.add("show");
+
+        if (eliminationTimeoutId) {
+          clearTimeout(eliminationTimeoutId);
+        }
+        // hide after ~3 seconds
+        eliminationTimeoutId = setTimeout(() => {
+          popup.classList.remove("show");
+        }, 3000);
+      }
+
+      function formatDebugName(displayName, characterName) {
+        if (characterName) {
+          return `${displayName} (${characterName})`;
+        }
+        return displayName;
+      }
+
+      function renderDebug(data) {
+        // Detect newly eliminated players (alive -> out) and show popup
+        const prev = previousPlayerStatus || {};
+        const newlyEliminated = [];
+        if (data.players && Array.isArray(data.players)) {
+          data.players.forEach((p) => {
+            const prevEntry = prev[p.id];
+            if (prevEntry && prevEntry.is_alive && !p.is_alive) {
+              newlyEliminated.push(p.display_name);
+            }
+          });
+          // update stored status
+          previousPlayerStatus = {};
+          data.players.forEach((p) => {
+            previousPlayerStatus[p.id] = { is_alive: p.is_alive };
+          });
+        }
+        if (newlyEliminated.length > 0) {
+          const nameList = newlyEliminated.join(", ");
+          showEliminationPopup(nameList);
+        }
+        // Build lookup maps for player labels
+        const playersById = {};
+        const playerLabelById = {};
+        if (data.players && Array.isArray(data.players)) {
+          data.players.forEach((p) => {
+            playersById[p.id] = p;
+            playerLabelById[p.id] = formatDebugName(
+              p.display_name,
+              p.character_name
+            );
+          });
+        }
+
+        // Game info
+        const gameInfoDiv = document.getElementById("gameInfo");
+        const g = data.game;
+        const roundText = g.current_round || "-";
+        const subroundText = g.current_subround || "-";
+        const phaseText = data.phase || data.game.phase || g.phase || "-";
+        gameInfoDiv.innerHTML = `
       <div><strong>Game ${g.id}</strong> – Code: <code>${g.code}</code></div>
       <div class="small">
         Status: ${g.status} &nbsp;•&nbsp;
@@ -534,78 +618,84 @@
       </div>
     `;
 
-    // Student join link + QR code (prefills code in frontend)
-    const joinLinkEl = document.getElementById("joinLink");
-    const qrContainer = document.getElementById("qrContainer");
-    if (joinLinkEl && qrContainer && g && g.code) {
-      const joinUrl = window.location.origin + "/frontend.html?code=" + encodeURIComponent(g.code);
-      joinLinkEl.textContent = joinUrl;
+        // Student join link + QR code (prefills code in frontend)
+        const joinLinkEl = document.getElementById("joinLink");
+        const qrContainer = document.getElementById("qrContainer");
+        if (joinLinkEl && qrContainer && g && g.code) {
+          const joinUrl =
+            window.location.origin +
+            "/frontend.html?code=" +
+            encodeURIComponent(g.code);
+          joinLinkEl.textContent = joinUrl;
 
-      // Rebuild QR each refresh to avoid duplicates
-      qrContainer.innerHTML = "";
-      if (window.QRCode) {
-        new QRCode(qrContainer, {
-          text: joinUrl,
-          width: 140,
-          height: 140,
-        });
-      } else {
-        qrContainer.textContent = "QR library not loaded.";
-      }
-    }
-
-    // Players table
-    const playersDiv = document.getElementById("playersTable");
-    if (!data.players || !data.players.length) {
-      playersDiv.innerHTML = "<p>No players.</p>";
-    } else {
-      let html = '<table><thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Alive</th><th>Pod</th><th>Subround 1 Target</th><th>Subround 2 Target</th><th>Actions</th></tr></thead><tbody>';
-
-      // Build quick lookup for pods and assignments
-      const podByPlayerId = {};
-      (data.pods || []).forEach(pod => {
-        pod.members.forEach(m => {
-          podByPlayerId[m.id] = pod.label;
-        });
-      });
-
-      const assignmentsByPlayer = {};
-      (data.assignments || []).forEach(a => {
-        const key = a.interviewer_player_id;
-        if (!assignmentsByPlayer[key]) assignmentsByPlayer[key] = {};
-        assignmentsByPlayer[key][a.subround] = a.interviewee_name;
-      });
-
-      data.players.forEach(p => {
-        const podLabel = podByPlayerId[p.id] || "";
-        const a = assignmentsByPlayer[p.id] || {};
-        const t1 = a[1] || "";
-        const t2 = a[2] || "";
-
-        let roleBadge = '<span class="badge">hidden</span>';
-        if (showRoles) {
-          if (p.role === 'goodie') {
-            roleBadge = '<span class="badge goodie">goodie</span>';
-          } else if (p.role === 'baddie') {
-            roleBadge = '<span class="badge baddie">baddie</span>';
+          // Rebuild QR each refresh to avoid duplicates
+          qrContainer.innerHTML = "";
+          if (window.QRCode) {
+            new QRCode(qrContainer, {
+              text: joinUrl,
+              width: 140,
+              height: 140,
+            });
           } else {
-            roleBadge = '<span class="badge">unknown</span>';
+            qrContainer.textContent = "QR library not loaded.";
           }
         }
 
-        let aliveBadge = p.is_alive
-          ? '<span class="badge">alive</span>'
-          : '<span class="badge dead">out</span>';
+        // Players table
+        const playersDiv = document.getElementById("playersTable");
+        if (!data.players || !data.players.length) {
+          playersDiv.innerHTML = "<p>No players.</p>";
+        } else {
+          let html =
+            "<table><thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Alive</th><th>Pod</th><th>Subround 1 Target</th><th>Subround 2 Target</th><th>Actions</th></tr></thead><tbody>";
 
-        const fullName = playerLabelById[p.id] || p.display_name;
+          // Build quick lookup for pods and assignments
+          const podByPlayerId = {};
+          (data.pods || []).forEach((pod) => {
+            pod.members.forEach((m) => {
+              podByPlayerId[m.id] = pod.label;
+            });
+          });
 
-        let actionHtml = '';
-        if (p.is_alive) {
-          const confirmLabel = fullName;
-          actionHtml = `<button class="danger" onclick='markGhost(${p.id}, ${JSON.stringify(confirmLabel)})'>Ghost 👻</button>`;
-        }
+          const assignmentsByPlayer = {};
+          (data.assignments || []).forEach((a) => {
+            const key = a.interviewer_player_id;
+            if (!assignmentsByPlayer[key]) assignmentsByPlayer[key] = {};
+            assignmentsByPlayer[key][a.subround] = a.interviewee_name;
+          });
 
-        html += `<tr>
+          data.players.forEach((p) => {
+            const podLabel = podByPlayerId[p.id] || "";
+            const a = assignmentsByPlayer[p.id] || {};
+            const t1 = a[1] || "";
+            const t2 = a[2] || "";
+
+            let roleBadge = '<span class="badge">hidden</span>';
+            if (showRoles) {
+              if (p.role === "goodie") {
+                roleBadge = '<span class="badge goodie">goodie</span>';
+              } else if (p.role === "baddie") {
+                roleBadge = '<span class="badge baddie">baddie</span>';
+              } else {
+                roleBadge = '<span class="badge">unknown</span>';
+              }
+            }
+
+            let aliveBadge = p.is_alive
+              ? '<span class="badge">alive</span>'
+              : '<span class="badge dead">out</span>';
+
+            const fullName = playerLabelById[p.id] || p.display_name;
+
+            let actionHtml = "";
+            if (p.is_alive) {
+              const confirmLabel = fullName;
+              actionHtml = `<button class="danger" onclick='markGhost(${
+                p.id
+              }, ${JSON.stringify(confirmLabel)})'>Ghost 👻</button>`;
+            }
+
+            html += `<tr>
           <td>${p.id}</td>
           <td>${fullName}</td>
           <td>${roleBadge}</td>
@@ -615,74 +705,77 @@
           <td>${t2}</td>
           <td>${actionHtml}</td>
         </tr>`;
-      });
+          });
 
-      html += '</tbody></table>';
-      playersDiv.innerHTML = html;
-    }
-
-    // Pods view
-    const podsDiv = document.getElementById("podsView");
-    if (!data.pods || !data.pods.length) {
-      podsDiv.innerHTML = "<p>No pods for this round.</p>";
-    } else {
-      let html = "";
-      data.pods.forEach(pod => {
-        html += `<div class="pod-label">${pod.label}</div>`;
-        if (!pod.members || !pod.members.length) {
-          html += '<div class="small">No members.</div>';
-          return;
+          html += "</tbody></table>";
+          playersDiv.innerHTML = html;
         }
-        html += '<div class="small">Members: ';
-        html += pod.members.map(m => {
-          const baseLabel = playerLabelById[m.id] || m.display_name;
-          let label = baseLabel;
-          if (showRoles && m.role === 'baddie') label += ' (baddie)';
-          if (!m.is_alive) label += ' [out]';
-          return label;
-        }).join(', ');
-        html += '</div>';
-      });
-      podsDiv.innerHTML = html;
-    }
 
-    // Assignments view
-    const assignDiv = document.getElementById("assignmentsView");
-    if (!data.assignments || !data.assignments.length) {
-      assignDiv.innerHTML = "<p>No interview assignments.</p>";
-    } else {
-      let html = '<table><thead><tr><th>Subround</th><th>Interviewer</th><th>Interviewee</th></tr></thead><tbody>';
-      data.assignments.forEach(a => {
-        html += `<tr>
+        // Pods view
+        const podsDiv = document.getElementById("podsView");
+        if (!data.pods || !data.pods.length) {
+          podsDiv.innerHTML = "<p>No pods for this round.</p>";
+        } else {
+          let html = "";
+          data.pods.forEach((pod) => {
+            html += `<div class="pod-label">${pod.label}</div>`;
+            if (!pod.members || !pod.members.length) {
+              html += '<div class="small">No members.</div>';
+              return;
+            }
+            html += '<div class="small">Members: ';
+            html += pod.members
+              .map((m) => {
+                const baseLabel = playerLabelById[m.id] || m.display_name;
+                let label = baseLabel;
+                if (showRoles && m.role === "baddie") label += " (baddie)";
+                if (!m.is_alive) label += " [out]";
+                return label;
+              })
+              .join(", ");
+            html += "</div>";
+          });
+          podsDiv.innerHTML = html;
+        }
+
+        // Assignments view
+        const assignDiv = document.getElementById("assignmentsView");
+        if (!data.assignments || !data.assignments.length) {
+          assignDiv.innerHTML = "<p>No interview assignments.</p>";
+        } else {
+          let html =
+            "<table><thead><tr><th>Subround</th><th>Interviewer</th><th>Interviewee</th></tr></thead><tbody>";
+          data.assignments.forEach((a) => {
+            html += `<tr>
           <td>${a.subround}</td>
           <td>${a.interviewer_name}</td>
           <td>${a.interviewee_name}</td>
         </tr>`;
-      });
-      html += '</tbody></table>';
-      assignDiv.innerHTML = html;
-    }
+          });
+          html += "</tbody></table>";
+          assignDiv.innerHTML = html;
+        }
 
-    // Votes view
-    const votesDiv = document.getElementById("votesView");
-    if (!data.votes || !data.votes.length) {
-      votesDiv.innerHTML = "<p>No votes yet.</p>";
-    } else {
-      let vhtml = '<table><thead><tr><th>Target</th><th>Votes</th></tr></thead><tbody>';
-      data.votes.forEach(v => {
-        vhtml += `<tr>
+        // Votes view
+        const votesDiv = document.getElementById("votesView");
+        if (!data.votes || !data.votes.length) {
+          votesDiv.innerHTML = "<p>No votes yet.</p>";
+        } else {
+          let vhtml =
+            "<table><thead><tr><th>Target</th><th>Votes</th></tr></thead><tbody>";
+          data.votes.forEach((v) => {
+            vhtml += `<tr>
           <td>${v.target_name}</td>
           <td>${v.vote_count}</td>
         </tr>`;
-      });
-      vhtml += '</tbody></table>';
-      votesDiv.innerHTML = vhtml;
-    }
-  }
+          });
+          vhtml += "</tbody></table>";
+          votesDiv.innerHTML = vhtml;
+        }
+      }
 
-  // initial load
-  loadGames();
-</script>
-
-</body>
+      // initial load
+      loadGames();
+    </script>
+  </body>
 </html>

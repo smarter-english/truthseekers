@@ -637,6 +637,47 @@
           alert("Error marking player as ghost (see console).");
         }
       }
+      async function renamePlayer(playerId, currentName) {
+        if (!currentGameId) return;
+
+        const existing = (currentName || "").toString();
+        const next = prompt("New name for this player:", existing);
+        if (next === null) return; // cancelled
+
+        const cleaned = next.trim();
+        if (!cleaned) {
+          alert("Name cannot be empty.");
+          return;
+        }
+        if (cleaned.length > 40) {
+          alert("Name too long (max 40 characters).");
+          return;
+        }
+
+        try {
+          const res = await fetch(
+            API + `/games/${currentGameId}/players/${playerId}/rename`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ display_name: cleaned }),
+            }
+          );
+
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(text);
+            alert("Could not rename player: " + text);
+            return;
+          }
+
+          await refreshDebug();
+          await loadGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error renaming player (see console).");
+        }
+      }
 
       function toggleRoles() {
         showRoles = !showRoles;
@@ -941,9 +982,15 @@
             const fullName = playerLabelById[p.id] || p.display_name;
 
             let actionHtml = "";
+
+            // Rename is always available
+            actionHtml += `<button class="secondary" onclick='renamePlayer(${
+              p.id
+            }, ${JSON.stringify(p.display_name || "")})'>Rename</button>`;
+
             if (p.is_alive) {
               const confirmLabel = fullName;
-              actionHtml = `<button class="danger" onclick='markGhost(${
+              actionHtml += ` <button class="danger" onclick='markGhost(${
                 p.id
               }, ${JSON.stringify(confirmLabel)})'>Ghost 👻</button>`;
             }

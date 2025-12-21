@@ -1496,7 +1496,41 @@ app.post('/games/:id/next-round', async (req, res) => {
     res.status(500).json({ error: 'Failed to create next round' });
   }
 });
+// teacher: rename a player (fix typos / duplicates)
+app.post('/games/:gameId/players/:playerId/rename', async (req, res) => {
+  const gameId = Number(req.params.gameId);
+  const playerId = Number(req.params.playerId);
+  const displayName = (req.body && req.body.display_name ? String(req.body.display_name) : '').trim();
 
+  if (!gameId || !playerId) {
+    return res.status(400).json({ error: 'Invalid gameId/playerId' });
+  }
+  if (!displayName) {
+    return res.status(400).json({ error: 'display_name is required' });
+  }
+  if (displayName.length > 40) {
+    return res.status(400).json({ error: 'display_name too long (max 40 chars)' });
+  }
+
+  try {
+    const upd = await pool.query(
+      `UPDATE game_players
+       SET display_name = $1
+       WHERE id = $2 AND game_id = $3
+       RETURNING id, display_name`,
+      [displayName, playerId, gameId]
+    );
+
+    if (upd.rows.length === 0) {
+      return res.status(404).json({ error: 'Player not found for this game' });
+    }
+
+    res.json({ ok: true, player: upd.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to rename player', detail: err.message });
+  }
+});
 // teacher: mark a player as a ghost (eliminate)
 app.post('/games/:gameId/players/:playerId/ghost', async (req, res) => {
   const gameId = Number(req.params.gameId);

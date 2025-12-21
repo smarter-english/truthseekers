@@ -676,10 +676,23 @@
         card.className = "player-card";
 
         const img = document.createElement("img");
-        // Prefer avatar file if present
-        if (player && player.character_avatar_file) {
-          img.src = `/assets/icons/${player.character_avatar_file}`;
+
+        function ghostifyFilename(filename) {
+          if (!filename) return filename;
+          if (filename.startsWith("ghost_")) return filename;
+          return `ghost_${filename}`;
         }
+
+        // Prefer avatar file if present; use ghost version if eliminated
+        if (player && player.character_avatar_file) {
+          const file =
+            player.is_alive === false
+              ? ghostifyFilename(player.character_avatar_file)
+              : player.character_avatar_file;
+
+          img.src = `/assets/icons/${file}`;
+        }
+
         img.alt = player.character_name || "avatar";
 
         const names = document.createElement("div");

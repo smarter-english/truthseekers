@@ -249,8 +249,18 @@
     <h1>Truthseekers – Teacher Dashboard</h1>
     <div id="statusBar">API: <span id="apiUrl"></span></div>
     <div id="eliminationPopup">
-      <span class="skull">☠️</span>
-      <span class="message" id="eliminationMessage"></span>
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+        "
+      >
+        <span class="skull">☠️</span>
+        <span class="message">ELIMINATED</span>
+      </div>
+      <div id="eliminationCards" style="margin-top: 10px"></div>
     </div>
 
     <div
@@ -639,12 +649,53 @@
         }
       }
 
-      function showEliminationPopup(nameList) {
+      function showEliminationPopup(players) {
         const popup = document.getElementById("eliminationPopup");
-        const msgEl = document.getElementById("eliminationMessage");
-        if (!popup || !msgEl) return;
+        const cardsEl = document.getElementById("eliminationCards");
+        if (!popup || !cardsEl) return;
 
-        msgEl.textContent = `${nameList} has been eliminated.`;
+        const list = Array.isArray(players) ? players : [];
+        cardsEl.innerHTML = "";
+
+        function ghostifyFilename(filename) {
+          if (!filename) return filename;
+          if (filename.startsWith("ghost_")) return filename;
+          return `ghost_${filename}`;
+        }
+
+        list.forEach((p) => {
+          const wrap = document.createElement("div");
+          wrap.style.display = "flex";
+          wrap.style.alignItems = "center";
+          wrap.style.justifyContent = "center";
+          wrap.style.gap = "10px";
+          wrap.style.marginTop = "6px";
+
+          const img = document.createElement("img");
+          img.style.width = "40px";
+          img.style.height = "40px";
+          img.style.objectFit = "contain";
+          img.style.borderRadius = "0";
+
+          if (p && p.character_avatar_file) {
+            const file = ghostifyFilename(p.character_avatar_file);
+            img.src = `/assets/icons/${file}`;
+          }
+          img.alt = p.character_name || "avatar";
+
+          const txt = document.createElement("div");
+          txt.style.fontWeight = "700";
+          txt.style.textTransform = "uppercase";
+          txt.style.fontSize = "14px";
+          const charName = p.character_name || "";
+          const realName = p.display_name || "";
+          txt.textContent = charName ? `${charName} (${realName})` : realName;
+
+          wrap.appendChild(img);
+          wrap.appendChild(txt);
+          cardsEl.appendChild(wrap);
+        });
+
         // restart animation
         popup.classList.remove("show");
         void popup.offsetWidth;
@@ -653,7 +704,6 @@
         if (eliminationTimeoutId) {
           clearTimeout(eliminationTimeoutId);
         }
-        // hide after ~3 seconds
         eliminationTimeoutId = setTimeout(() => {
           popup.classList.remove("show");
         }, 3000);
@@ -779,7 +829,7 @@
           data.players.forEach((p) => {
             const prevEntry = prev[p.id];
             if (prevEntry && prevEntry.is_alive && !p.is_alive) {
-              newlyEliminated.push(p.display_name);
+              newlyEliminated.push(p);
             }
           });
           // update stored status
@@ -789,8 +839,7 @@
           });
         }
         if (newlyEliminated.length > 0) {
-          const nameList = newlyEliminated.join(", ");
-          showEliminationPopup(nameList);
+          showEliminationPopup(newlyEliminated);
         }
         maybeShowGameOverModal(data);
         // Build lookup maps for player labels
@@ -982,14 +1031,62 @@
         if (!data.votes || !data.votes.length) {
           votesDiv.innerHTML = "<p>No votes yet.</p>";
         } else {
+          // Build a reverse lookup by display name as a fallback when debug votes lack target_player_id
+          const playerByDisplayName = {};
+          (data.players || []).forEach((p) => {
+            if (p.display_name) playerByDisplayName[p.display_name] = p;
+          });
+
+          function voteTargetLabel(v) {
+            // Prefer explicit id if present
+            const tid = v.target_player_id || v.target_id || null;
+            if (tid && playersById[tid]) {
+              return { player: playersById[tid], label: playerLabelById[tid] };
+            }
+
+            // Fallback: try to match by display name
+            const maybe = v.target_name && playerByDisplayName[v.target_name];
+            if (maybe) {
+              return {
+                player: maybe,
+                label: playerLabelById[maybe.id] || maybe.display_name,
+              };
+            }
+
+            // Last resort
+            return { player: null, label: v.target_name || "" };
+          }
+
           let vhtml =
             "<table><thead><tr><th>Target</th><th>Votes</th></tr></thead><tbody>";
+
           data.votes.forEach((v) => {
+            const info = voteTargetLabel(v);
+            let targetCell = info.label;
+
+            if (info.player && info.player.character_avatar_file) {
+              // Use ghost avatar if eliminated
+              const file =
+                info.player.is_alive === false
+                  ? info.player.character_avatar_file.startsWith("ghost_")
+                    ? info.player.character_avatar_file
+                    : `ghost_${info.player.character_avatar_file}`
+                  : info.player.character_avatar_file;
+
+              targetCell = `
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <img src="/assets/icons/${file}" alt="avatar" style="width:32px; height:32px; object-fit:contain; border-radius:0;" />
+                  <div>${info.label}</div>
+                </div>
+              `;
+            }
+
             vhtml += `<tr>
-          <td>${v.target_name}</td>
+          <td>${targetCell}</td>
           <td>${v.vote_count}</td>
         </tr>`;
           });
+
           vhtml += "</tbody></table>";
           votesDiv.innerHTML = vhtml;
         }

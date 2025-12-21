@@ -1560,7 +1560,8 @@ app.get('/games/:id/debug', async (req, res) => {
             gp.display_name,
             gp.role,
             gp.is_alive,
-            c.name AS character_name
+            c.name AS character_name,
+            c.avatar_file AS character_avatar_file
     FROM game_players gp
     LEFT JOIN characters c ON c.id = gp.character_id
     WHERE gp.game_id = $1

@@ -175,6 +175,74 @@
         font-size: 12px;
         color: #555;
       }
+      /* Game-over modal */
+      #gameOverModal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      }
+      #gameOverModal.show {
+        display: flex;
+      }
+      #gameOverModal .panel {
+        background: #fff;
+        border-radius: 10px;
+        width: min(760px, 92vw);
+        max-height: 86vh;
+        overflow: auto;
+        padding: 16px 16px 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      }
+      #gameOverModal .panel h2 {
+        margin: 0 0 6px;
+      }
+      #gameOverModal .reason {
+        margin: 0 0 12px;
+        color: #444;
+        font-size: 13px;
+      }
+      #gameOverModal .baddiesGrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .player-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        background: #f6f6f6;
+      }
+      .player-card img {
+        width: 42px;
+        height: 42px;
+        border-radius: 0;
+        object-fit: contain;
+        background: transparent;
+      }
+      .player-card .names {
+        line-height: 1.2;
+      }
+      .player-card .character-name {
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .player-card .real-name {
+        font-size: 12px;
+        color: #555;
+      }
+      #gameOverModal .actions {
+        margin-top: 12px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
     </style>
   </head>
   <body>
@@ -183,6 +251,27 @@
     <div id="eliminationPopup">
       <span class="skull">☠️</span>
       <span class="message" id="eliminationMessage"></span>
+    </div>
+
+    <div
+      id="gameOverModal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="gameOverTitle"
+    >
+      <div class="panel">
+        <h2 id="gameOverTitle">Game Over</h2>
+        <div class="reason" id="gameOverReason"></div>
+        <div class="small" style="margin-top: 6px; font-weight: 600">
+          Baddies were:
+        </div>
+        <div class="baddiesGrid" id="baddiesGrid"></div>
+        <div class="actions">
+          <button class="secondary" onclick="closeGameOverModal()">
+            Close
+          </button>
+        </div>
+      </div>
     </div>
 
     <div id="games" class="section">
@@ -249,6 +338,7 @@
       let previousPlayerStatus = {};
       let eliminationTimeoutId = null;
       let showRoles = false;
+      let lastSeenFinishedForGame = {};
 
       async function loadGames() {
         const gamesListDiv = document.getElementById("gamesList");
@@ -576,6 +666,98 @@
         return displayName;
       }
 
+      function closeGameOverModal() {
+        const modal = document.getElementById("gameOverModal");
+        if (modal) modal.classList.remove("show");
+      }
+
+      function createSmallPlayerCard(player) {
+        const card = document.createElement("div");
+        card.className = "player-card";
+
+        const img = document.createElement("img");
+        // Prefer avatar file if present
+        if (player && player.character_avatar_file) {
+          img.src = `/assets/icons/${player.character_avatar_file}`;
+        }
+        img.alt = player.character_name || "avatar";
+
+        const names = document.createElement("div");
+        names.className = "names";
+
+        const characterName = document.createElement("div");
+        characterName.className = "character-name";
+        characterName.textContent = player.character_name || "";
+
+        const realName = document.createElement("div");
+        realName.className = "real-name";
+        realName.textContent = `(${player.display_name || ""})`;
+
+        names.appendChild(characterName);
+        names.appendChild(realName);
+
+        card.appendChild(img);
+        card.appendChild(names);
+
+        return card;
+      }
+
+      function maybeShowGameOverModal(data) {
+        if (!data || !data.game) return;
+        const g = data.game;
+        const gameId = g.id;
+        const finished = g.status === "finished";
+
+        if (!finished) {
+          lastSeenFinishedForGame[gameId] = false;
+          return;
+        }
+
+        // Only show once per game per page load
+        if (lastSeenFinishedForGame[gameId] === true) return;
+        lastSeenFinishedForGame[gameId] = true;
+
+        const winning = g.winning_side;
+        const title = document.getElementById("gameOverTitle");
+        const reason = document.getElementById("gameOverReason");
+
+        if (title) {
+          if (winning === "baddies")
+            title.textContent = "Game Over — Baddies win";
+          else if (winning === "goodies")
+            title.textContent = "Game Over — Goodies win";
+          else title.textContent = "Game Over";
+        }
+
+        if (reason) {
+          if (winning === "baddies") {
+            reason.textContent =
+              "Baddies win: more baddies alive than goodies alive.";
+          } else if (winning === "goodies") {
+            reason.textContent = "Goodies win: all baddies eliminated.";
+          } else {
+            reason.textContent = "The game has ended.";
+          }
+        }
+
+        // Build baddies list from debug players (safe because game is finished)
+        const baddies = (data.players || []).filter((p) => p.role === "baddie");
+        const grid = document.getElementById("baddiesGrid");
+        if (grid) {
+          grid.innerHTML = "";
+          if (!baddies.length) {
+            grid.innerHTML = '<div class="small">No baddies found.</div>';
+          } else {
+            baddies.forEach((p) => {
+              grid.appendChild(createSmallPlayerCard(p));
+            });
+          }
+        }
+
+        const modal = document.getElementById("gameOverModal");
+        if (modal) modal.classList.add("show");
+      }
+
       function renderDebug(data) {
         // Detect newly eliminated players (alive -> out) and show popup
         const prev = previousPlayerStatus || {};
@@ -597,6 +779,7 @@
           const nameList = newlyEliminated.join(", ");
           showEliminationPopup(nameList);
         }
+        maybeShowGameOverModal(data);
         // Build lookup maps for player labels
         const playersById = {};
         const playerLabelById = {};

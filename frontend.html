@@ -163,6 +163,49 @@
         }
       }
 
+      /* Game-over modal */
+      #gameOverModal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+      }
+      #gameOverModal.show {
+        display: flex;
+      }
+      #gameOverModal .panel {
+        background: #fff;
+        border-radius: 10px;
+        width: min(560px, 92vw);
+        max-height: 86vh;
+        overflow: auto;
+        padding: 16px 16px 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      }
+      #gameOverModal .panel h2 {
+        margin: 0 0 6px;
+      }
+      #gameOverModal .reason {
+        margin: 0 0 12px;
+        color: #444;
+        font-size: 13px;
+      }
+      #gameOverModal .baddiesGrid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 8px;
+        margin-top: 10px;
+      }
+      #gameOverModal .actions {
+        margin-top: 12px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
       #headerBar {
         position: sticky;
         top: 0;
@@ -314,6 +357,27 @@
           <span class="message" id="playerEliminationMessage"></span>
         </div>
 
+        <div
+          id="gameOverModal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="gameOverTitle"
+        >
+          <div class="panel">
+            <h2 id="gameOverTitle">Game Over</h2>
+            <div class="reason" id="gameOverReason"></div>
+            <div class="small" style="margin-top: 6px; font-weight: 600">
+              Baddies were:
+            </div>
+            <div class="baddiesGrid" id="baddiesGrid"></div>
+            <div class="actions">
+              <button type="button" onclick="closeGameOverModal()">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div id="phaseBanner" class="small hidden"></div>
         <div
           id="debugLog"
@@ -388,6 +452,70 @@
       let lastSeenEliminationSeq = 0;
       let lastSeenForceLogoutSeq = 0;
       let lastPodRenderKey = null;
+      let lastSeenGameFinished = false;
+      function closeGameOverModal() {
+        const modal = document.getElementById("gameOverModal");
+        if (modal) modal.classList.remove("show");
+      }
+
+      function maybeShowGameOverModal(state) {
+        try {
+          const g = state && state.game ? state.game : null;
+          if (!g) return;
+
+          const finished = g.status === "finished";
+          if (!finished) {
+            lastSeenGameFinished = false;
+            return;
+          }
+
+          // Only show once per session
+          if (lastSeenGameFinished) return;
+          lastSeenGameFinished = true;
+
+          const winning = g.winning_side;
+          const title = document.getElementById("gameOverTitle");
+          const reason = document.getElementById("gameOverReason");
+
+          if (title) {
+            if (winning === "baddies")
+              title.textContent = "Game Over — Baddies win";
+            else if (winning === "goodies")
+              title.textContent = "Game Over — Goodies win";
+            else title.textContent = "Game Over";
+          }
+
+          if (reason) {
+            if (winning === "baddies") {
+              reason.textContent =
+                "Baddies win: more baddies alive than goodies alive.";
+            } else if (winning === "goodies") {
+              reason.textContent = "Goodies win: all baddies eliminated.";
+            } else {
+              reason.textContent = "The game has ended.";
+            }
+          }
+
+          const grid = document.getElementById("baddiesGrid");
+          if (grid) {
+            grid.innerHTML = "";
+            const baddies = (state && state.baddiesReveal) || [];
+            if (!baddies.length) {
+              grid.innerHTML = '<div class="small">No baddies found.</div>';
+            } else {
+              baddies.forEach((p) => {
+                grid.appendChild(createPlayerCard(p));
+              });
+            }
+          }
+
+          const modal = document.getElementById("gameOverModal");
+          if (modal) modal.classList.add("show");
+        } catch (e) {
+          // Never break gameplay polling
+          console.error("game-over modal error", e);
+        }
+      }
 
       function prefillGameCodeFromQuery() {
         try {
@@ -882,6 +1010,7 @@
         }
 
         lastState = state;
+        maybeShowGameOverModal(state);
         updateCharacterUI(state);
 
         const nameHeaderEl = document.getElementById("displayNameHeader");
@@ -1009,6 +1138,7 @@
         document.getElementById("displayNameHeader").textContent =
           state.player.display_name;
         updateCharacterUI(state);
+        maybeShowGameOverModal(state);
         document.getElementById("viewGameCode").textContent = state.game.code;
 
         // Update round/phase label in header for initial render

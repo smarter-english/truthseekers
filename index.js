@@ -979,6 +979,7 @@ app.get('/me/current-state', async (req, res) => {
   let eligibleTargets = [];
   let myInterviews = [];
   let eliminationEvent = null;
+  let baddiesReveal = [];
 
   if (game.current_round) {
     const roundRes = await pool.query(
@@ -1166,9 +1167,28 @@ app.get('/me/current-state', async (req, res) => {
     eligibleTargets = tRes.rows;
   }
 
+  // Reveal baddies at end of game so clients can show a game-over popup
+  if (game.status === 'finished') {
+    const baddiesRes = await pool.query(
+      `SELECT gp.id,
+              gp.display_name,
+              gp.is_alive,
+              c.name AS character_name,
+              c.avatar_file AS character_avatar_file
+       FROM game_players gp
+       LEFT JOIN characters c ON c.id = gp.character_id
+       WHERE gp.game_id = $1
+         AND gp.role = 'baddie'
+       ORDER BY gp.display_name`,
+      [player.game_id]
+    );
+    baddiesReveal = baddiesRes.rows;
+  }
+
   res.json({
     phase: game.phase,
     forceLogoutSeq: game.force_logout_seq || 0,
+    baddiesReveal,
     player: {
       id: player.id,
       display_name: player.display_name,
@@ -1595,18 +1615,48 @@ if (round) {
   }, {});
 }
 
-  // Attach per-player completion flags for teacher UI (current round only)
+  // --- Per-player completion flags for teacher UI (current round only) ---
   // Canonical sources of truth:
-  // - voted: presence of a row in `votes` for (round_id, voter_player_id)
-  // - interview saved: presence of a row in `interviews` for (round_id, interviewer_player_id)
+  // - voted: row exists in `votes` for (round_id, voter_player_id)
+  // - interview saved: row exists in `interviews` for (round_id, interviewer_player_id, interviewee_player_id)
+
+  // Map: interviewer_player_id -> { subround: interviewee_player_id }
+  const assignedIntervieweeByPlayerAndSubround = {};
+  for (const a of assignments) {
+    if (!assignedIntervieweeByPlayerAndSubround[a.interviewer_player_id]) {
+      assignedIntervieweeByPlayerAndSubround[a.interviewer_player_id] = {};
+    }
+    assignedIntervieweeByPlayerAndSubround[a.interviewer_player_id][a.subround] = a.interviewee_player_id;
+  }
+
+  // Set of saved interview pairs for this round: "interviewer->interviewee"
+  const savedInterviewPairSet = new Set(
+    (interviewRecords || []).map(
+      (r) => `${r.interviewer_player_id}->${r.interviewee_player_id}`
+    )
+  );
+
   for (const p of players) {
+    // Voting
     p.has_voted = !!votedByPlayer[p.id];
     p.vote_target_id = null;
     const vr1 = voteRecords.find((v) => v.voter_player_id === p.id);
     if (vr1) p.vote_target_id = vr1.target_player_id;
 
+    // Interviews (any saved this round)
     p.saved_interviews_count = interviewCountsByPlayer[p.id] || 0;
     p.has_saved_interview = p.saved_interviews_count > 0;
+
+    // Interviews (subround-specific)
+    const sMap = assignedIntervieweeByPlayerAndSubround[p.id] || {};
+    const i1 = sMap[1] || null;
+    const i2 = sMap[2] || null;
+
+    p.interview_target_subround_1 = i1;
+    p.interview_target_subround_2 = i2;
+
+    p.has_saved_interview_subround_1 = !!(i1 && savedInterviewPairSet.has(`${p.id}->${i1}`));
+    p.has_saved_interview_subround_2 = !!(i2 && savedInterviewPairSet.has(`${p.id}->${i2}`));
   }
 
   // pods & members

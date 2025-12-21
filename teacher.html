@@ -655,7 +655,7 @@
           playersDiv.innerHTML = "<p>No players.</p>";
         } else {
           let html =
-            "<table><thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Alive</th><th>Pod</th><th>Interview saved</th><th>Voted</th><th>Subround 1 Target</th><th>Subround 2 Target</th><th>Actions</th></tr></thead><tbody>";
+            "<table><thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Alive</th><th>Pod</th><th>Interview 1 saved</th><th>Interview 2 saved</th><th>Voted</th><th>Subround 1 Target</th><th>Subround 2 Target</th><th>Actions</th></tr></thead><tbody>";
 
           // Build quick lookup for pods and assignments
           const podByPlayerId = {};
@@ -703,10 +703,14 @@
               }, ${JSON.stringify(confirmLabel)})'>Ghost 👻</button>`;
             }
 
-            const interviewDone =
-              !!p.has_saved_interview || (p.saved_interviews_count || 0) > 0;
+            const interview1Done = !!p.has_saved_interview_subround_1;
+            const interview2Done = !!p.has_saved_interview_subround_2;
             const votedDone = !!p.has_voted || !!p.vote_target_id;
-            const interviewBadge = interviewDone
+
+            const interview1Badge = interview1Done
+              ? '<span class="badge done">yes</span>'
+              : '<span class="badge todo">no</span>';
+            const interview2Badge = interview2Done
               ? '<span class="badge done">yes</span>'
               : '<span class="badge todo">no</span>';
             const votedBadge = votedDone
@@ -719,7 +723,8 @@
           <td>${roleBadge}</td>
           <td>${aliveBadge}</td>
           <td>${podLabel}</td>
-          <td>${interviewBadge}</td>
+          <td>${interview1Badge}</td>
+          <td>${interview2Badge}</td>
           <td>${votedBadge}</td>
           <td>${t1}</td>
           <td>${t2}</td>

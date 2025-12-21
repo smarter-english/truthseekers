@@ -353,8 +353,18 @@
         </div>
 
         <div id="playerEliminationPopup">
-          <span class="skull">☠️</span>
-          <span class="message" id="playerEliminationMessage"></span>
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              gap: 10px;
+            "
+          >
+            <span class="skull">☠️</span>
+            <span class="message">ELIMINATED</span>
+          </div>
+          <div id="playerEliminationCards" style="margin-top: 10px"></div>
         </div>
 
         <div
@@ -770,12 +780,64 @@
         }
       }
 
-      function showPlayerEliminationPopup(nameList) {
+      function showPlayerEliminationPopup(players) {
         const popup = document.getElementById("playerEliminationPopup");
-        const msgEl = document.getElementById("playerEliminationMessage");
-        if (!popup || !msgEl) return;
+        const cardsEl = document.getElementById("playerEliminationCards");
+        if (!popup || !cardsEl) return;
 
-        msgEl.textContent = `${nameList} has been eliminated.`;
+        const list = Array.isArray(players)
+          ? players
+          : players
+          ? [players]
+          : [];
+        cardsEl.innerHTML = "";
+
+        // Render a compact card for each eliminated player
+        list.forEach((p) => {
+          if (!p) return;
+
+          const wrap = document.createElement("div");
+          wrap.style.display = "flex";
+          wrap.style.alignItems = "center";
+          wrap.style.justifyContent = "center";
+          wrap.style.gap = "10px";
+          wrap.style.marginTop = "6px";
+
+          const img = document.createElement("img");
+          img.style.width = "40px";
+          img.style.height = "40px";
+          img.style.objectFit = "contain";
+          img.style.borderRadius = "0";
+
+          // Use ghost avatar filename if eliminated
+          function ghostifyFilename(filename) {
+            if (!filename) return filename;
+            if (filename.startsWith("ghost_")) return filename;
+            return `ghost_${filename}`;
+          }
+
+          if (p.character_avatar_file) {
+            const file = ghostifyFilename(p.character_avatar_file);
+            img.src = `./assets/icons/${file}`;
+          } else if (p.character_avatar_url) {
+            img.src = p.character_avatar_url;
+          }
+          img.alt = p.character_name || "avatar";
+
+          const txt = document.createElement("div");
+          txt.style.fontWeight = "700";
+          txt.style.textTransform = "uppercase";
+          txt.style.fontSize = "14px";
+
+          const charName = p.character_name || "";
+          const realName = p.display_name || "";
+          txt.textContent = charName ? `${charName} (${realName})` : realName;
+
+          wrap.appendChild(img);
+          wrap.appendChild(txt);
+          cardsEl.appendChild(wrap);
+        });
+
         // restart animation
         popup.classList.remove("show");
         void popup.offsetWidth;
@@ -1005,7 +1067,8 @@
           typeof event.seq === "number" &&
           event.seq > lastSeenEliminationSeq
         ) {
-          showPlayerEliminationPopup(event.display_name);
+          const p = event.player || null;
+          showPlayerEliminationPopup(p);
           lastSeenEliminationSeq = event.seq;
         }
 

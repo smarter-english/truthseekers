@@ -1133,17 +1133,30 @@ app.get('/me/current-state', async (req, res) => {
   }
 
   // global elimination event: if the game recorded a last_eliminated_player_id
+  // Enrich with avatar + character name so clients can show a card.
   if (game.last_eliminated_player_id) {
     const elimRes = await pool.query(
-      'SELECT id, display_name FROM game_players WHERE id = $1',
+      `SELECT gp.id,
+              gp.display_name,
+              gp.is_alive,
+              c.name AS character_name,
+              c.avatar_file AS character_avatar_file
+       FROM game_players gp
+       LEFT JOIN characters c ON c.id = gp.character_id
+       WHERE gp.id = $1`,
       [game.last_eliminated_player_id]
     );
     const elimPlayer = elimRes.rows[0];
     if (elimPlayer) {
       eliminationEvent = {
         seq: game.last_eliminated_seq || 0,
-        player_id: elimPlayer.id,
-        display_name: elimPlayer.display_name,
+        player: {
+          id: elimPlayer.id,
+          display_name: elimPlayer.display_name,
+          is_alive: elimPlayer.is_alive,
+          character_name: elimPlayer.character_name,
+          character_avatar_file: elimPlayer.character_avatar_file,
+        },
       };
     }
   }

@@ -551,6 +551,53 @@
       let lastSeenForceLogoutSeq = 0;
       let lastPodRenderKey = null;
       let lastSeenGameFinished = false;
+      let lastMyAnswersRenderKey = null;
+      let lastFeedbackRenderKey = null;
+      let lastVoteRenderKey = null;
+      function computeMyAnswersKey(state) {
+        try {
+          const sheet = (state && state.answerSheet) || [];
+          return sheet
+            .map((q) => `${q.question_id}:${q.my_answer || ""}`)
+            .join(";");
+        } catch (e) {
+          return String(Date.now());
+        }
+      }
+
+      function computeFeedbackKey(state) {
+        try {
+          const interviews = (state && state.myInterviews) || [];
+          return interviews
+            .map((i) => {
+              const aKey = (i.answers || [])
+                .map((a) => `${a.question}:${a.reported_value}`)
+                .join("|");
+              return `${
+                i.interviewee_player_id || i.interviewee_name
+              }::${aKey}`;
+            })
+            .join(";");
+        } catch (e) {
+          return String(Date.now());
+        }
+      }
+
+      function computeVoteKey(state) {
+        try {
+          const aliveFlag =
+            state && state.player ? String(state.player.is_alive) : "";
+          const targets = (state && state.eligibleTargets) || [];
+          const tKey = targets
+            .map(
+              (t) => `${t.id}:${t.display_name || ""}:${t.character_name || ""}`
+            )
+            .join(";");
+          return `${aliveFlag}::${tKey}`;
+        } catch (e) {
+          return String(Date.now());
+        }
+      }
 
       // --- shared helpers (reduce duplication) ---
       function ghostifyFilename(filename) {
@@ -1238,14 +1285,18 @@
         // Update "Your Answers" block inside Interview tab (safe, read-only)
         const myAnsDiv = document.getElementById("myAnswersInsideInterview");
         if (myAnsDiv) {
-          myAnsDiv.innerHTML = "";
-          if (state.answerSheet) {
-            state.answerSheet.forEach((q) => {
-              const div = document.createElement("div");
-              div.className = "answer";
-              div.innerHTML = `<strong>${q.text}</strong><br>${q.my_answer}`;
-              myAnsDiv.appendChild(div);
-            });
+          const key = computeMyAnswersKey(state);
+          if (key !== lastMyAnswersRenderKey) {
+            lastMyAnswersRenderKey = key;
+            myAnsDiv.innerHTML = "";
+            if (state.answerSheet) {
+              state.answerSheet.forEach((q) => {
+                const div = document.createElement("div");
+                div.className = "answer";
+                div.innerHTML = `<strong>${q.text}</strong><br>${q.my_answer}`;
+                myAnsDiv.appendChild(div);
+              });
+            }
           }
         }
 
@@ -1259,7 +1310,7 @@
         buildRallySection(state);
 
         // Update feedback & voting sections
-        buildFeedbackSection();
+        buildFeedbackSection(state);
         buildVoteSection(state);
 
         // Handle phase changes (tab changes)
@@ -1318,7 +1369,7 @@
           setActiveTab("interview");
         } else if (phase === "feedback") {
           setActiveTab("feedback");
-          buildFeedbackSection(); // <— FORCE REFRESH OF CONTENT
+          buildFeedbackSection(state); // <— FORCE REFRESH OF CONTENT
         } else if (phase === "voting") {
           setActiveTab("voting");
         }
@@ -1393,19 +1444,23 @@
         // Render own answers inside interview section
         const myAnsDiv = document.getElementById("myAnswersInsideInterview");
         if (myAnsDiv) {
-          myAnsDiv.innerHTML = "";
-          if (state.answerSheet) {
-            state.answerSheet.forEach((q) => {
-              const div = document.createElement("div");
-              div.className = "answer";
-              div.innerHTML = `<strong>${q.text}</strong><br>${q.my_answer}`;
-              myAnsDiv.appendChild(div);
-            });
+          const key = computeMyAnswersKey(state);
+          if (key !== lastMyAnswersRenderKey) {
+            lastMyAnswersRenderKey = key;
+            myAnsDiv.innerHTML = "";
+            if (state.answerSheet) {
+              state.answerSheet.forEach((q) => {
+                const div = document.createElement("div");
+                div.className = "answer";
+                div.innerHTML = `<strong>${q.text}</strong><br>${q.my_answer}`;
+                myAnsDiv.appendChild(div);
+              });
+            }
           }
         }
 
         buildInterviewForm(state);
-        buildFeedbackSection();
+        buildFeedbackSection(state);
         buildVoteSection(state);
         buildRallySection(state);
 
@@ -1626,7 +1681,7 @@
         });
       }
 
-      function buildFeedbackSection() {
+      function buildFeedbackSection(state) {
         const section = document.getElementById("feedbackSection");
         const container = document.getElementById("feedbackContent");
         if (!section || !container) return;
@@ -1634,8 +1689,17 @@
         container.innerHTML = "";
 
         // Prefer server-provided interviews for the current round
-        const s = lastState;
+        const s = state || lastState;
         const interviews = s && s.myInterviews ? s.myInterviews : [];
+
+        const key = computeFeedbackKey(s);
+        if (key === lastFeedbackRenderKey) {
+          // Still ensure visibility rules are enforced
+          if (!interviews.length) section.classList.add("hidden");
+          else section.classList.remove("hidden");
+          return;
+        }
+        lastFeedbackRenderKey = key;
 
         if (!interviews.length) {
           section.classList.add("hidden");
@@ -1669,6 +1733,12 @@
 
         if (!section || !select) return;
 
+        const voteKey = computeVoteKey(state);
+        const targetsChanged = voteKey !== lastVoteRenderKey;
+        if (targetsChanged) {
+          lastVoteRenderKey = voteKey;
+        }
+
         // If ghost, show a friendly message and hide voting controls
         if (!state.player.is_alive) {
           section.classList.remove("hidden");
@@ -1699,28 +1769,30 @@
         if (voteBtn) voteBtn.classList.remove("hidden");
         if (currentVoteDiv) currentVoteDiv.classList.remove("hidden");
 
-        // Remember what the user currently has selected (if any)
-        const previousValue = select.value;
+        if (targetsChanged) {
+          // Remember what the user currently has selected (if any)
+          const previousValue = select.value;
 
-        select.innerHTML = '<option value="">-- choose a player --</option>';
-        targets.forEach((t) => {
-          const opt = document.createElement("option");
-          opt.value = t.id;
-          opt.textContent = formatName(t.display_name, t.character_name);
-          select.appendChild(opt);
-        });
+          select.innerHTML = '<option value="">-- choose a player --</option>';
+          targets.forEach((t) => {
+            const opt = document.createElement("option");
+            opt.value = t.id;
+            opt.textContent = formatName(t.display_name, t.character_name);
+            select.appendChild(opt);
+          });
 
-        // Try to restore selection: prefer in-progress selection, then last submitted vote
-        const optionValues = Array.from(select.options).map((o) => o.value);
-        if (previousValue && optionValues.includes(previousValue)) {
-          select.value = previousValue;
-        } else if (
-          lastVoteTargetId !== null &&
-          optionValues.includes(String(lastVoteTargetId))
-        ) {
-          select.value = String(lastVoteTargetId);
-        } else {
-          select.value = "";
+          // Try to restore selection: prefer in-progress selection, then last submitted vote
+          const optionValues = Array.from(select.options).map((o) => o.value);
+          if (previousValue && optionValues.includes(previousValue)) {
+            select.value = previousValue;
+          } else if (
+            lastVoteTargetId !== null &&
+            optionValues.includes(String(lastVoteTargetId))
+          ) {
+            select.value = String(lastVoteTargetId);
+          } else {
+            select.value = "";
+          }
         }
 
         // Restore the "You voted" message, if any
@@ -1840,7 +1912,7 @@
             statusDiv.textContent = `Interview with ${lastSavedInterviewName} saved.`;
           }
 
-          buildFeedbackSection();
+          buildFeedbackSection(lastState);
           alert("Interview saved!");
         } catch (err) {
           console.error(err);

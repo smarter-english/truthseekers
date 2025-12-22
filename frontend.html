@@ -347,6 +347,31 @@
           transform: rotate(360deg);
         }
       }
+      /* Finished screen (after game ends) */
+      #finishedSection {
+        margin-top: 14px;
+        padding: 14px 12px;
+        border: 1px solid #e5e5e5;
+        border-radius: 10px;
+        background: #f8fbff;
+        text-align: center;
+      }
+      #finishedSection .big {
+        font-size: 18px;
+        font-weight: 900;
+        margin-bottom: 6px;
+      }
+      #finishedSection .hint {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #444;
+        line-height: 1.35;
+      }
+      #finishedSection .sub {
+        margin-top: 6px;
+        font-size: 12px;
+        color: #666;
+      }
     </style>
   </head>
   <body>
@@ -445,6 +470,17 @@
             Game code: <strong><span id="waitingGameCode"></span></strong>
           </div>
           <div class="spinner" aria-label="Loading"></div>
+        </div>
+
+        <div id="finishedSection" class="hidden">
+          <div class="big" id="finishedTitle">🏁 Game over</div>
+          <div class="hint" id="finishedMessage"></div>
+          <div class="sub">
+            If you want to play again, ask your teacher to create a fresh game.
+          </div>
+          <div class="sub">
+            Game code: <strong><span id="finishedGameCode"></span></strong>
+          </div>
         </div>
 
         <div id="rallySection" class="section-card hidden">
@@ -682,15 +718,15 @@
         const waiting = document.getElementById("waitingSection");
         const codeEl = document.getElementById("waitingGameCode");
         if (!waiting) return;
-
-        const inProgress =
-          state && state.game && state.game.status === "in_progress";
+        const status = state && state.game ? state.game.status : null;
+        const inProgress = status === "in_progress";
+        const isFinished = status === "finished";
 
         if (codeEl && state && state.game && state.game.code) {
           codeEl.textContent = state.game.code;
         }
 
-        if (!inProgress) {
+        if (!inProgress && !isFinished) {
           // show waiting
           waiting.classList.remove("hidden");
 
@@ -702,8 +738,55 @@
           return;
         }
 
-        // game started
+        // game started or finished
         waiting.classList.add("hidden");
+      }
+
+      function updateFinishedUI(state) {
+        const finished = document.getElementById("finishedSection");
+        const titleEl = document.getElementById("finishedTitle");
+        const msgEl = document.getElementById("finishedMessage");
+        const codeEl = document.getElementById("finishedGameCode");
+        if (!finished) return;
+
+        const status = state && state.game ? state.game.status : null;
+        const isFinished = status === "finished";
+
+        if (codeEl && state && state.game && state.game.code) {
+          codeEl.textContent = state.game.code;
+        }
+
+        if (!isFinished) {
+          finished.classList.add("hidden");
+          return;
+        }
+
+        // Hide waiting + gameplay sections
+        document.getElementById("waitingSection")?.classList.add("hidden");
+        document.getElementById("rallySection")?.classList.add("hidden");
+        document.getElementById("interviewSection")?.classList.add("hidden");
+        document.getElementById("feedbackSection")?.classList.add("hidden");
+        document.getElementById("voteSection")?.classList.add("hidden");
+
+        const winner = state.game && state.game.winning_side;
+        if (titleEl) {
+          if (winner === "goodies")
+            titleEl.textContent = "🏁 Game over — Goodies win";
+          else if (winner === "baddies")
+            titleEl.textContent = "🏁 Game over — Baddies win";
+          else titleEl.textContent = "🏁 Game over";
+        }
+        if (msgEl) {
+          if (winner === "goodies") {
+            msgEl.textContent = "This game is over. The goodies won.";
+          } else if (winner === "baddies") {
+            msgEl.textContent = "This game is over. The baddies won.";
+          } else {
+            msgEl.textContent = "This game is over.";
+          }
+        }
+
+        finished.classList.remove("hidden");
       }
 
       function formatName(displayName, characterName) {
@@ -1156,10 +1239,13 @@
         maybeShowGameOverModal(state);
         updateCharacterUI(state);
         updateWaitingUI(state);
+        updateFinishedUI(state);
 
         // If the game hasn't started yet, don't render or switch gameplay tabs.
         // (Otherwise phase 'rally' will force the rally section visible.)
-        if (!(state && state.game && state.game.status === "in_progress")) {
+        const status = state && state.game ? state.game.status : null;
+        if (status !== "in_progress") {
+          // For 'finished' we still want the finished screen and modal; for 'lobby' we show waiting.
           return;
         }
 
@@ -1291,9 +1377,11 @@
         maybeShowGameOverModal(state);
         document.getElementById("viewGameCode").textContent = state.game.code;
         updateWaitingUI(state);
+        updateFinishedUI(state);
 
         // If the game hasn't started yet, show only the waiting screen.
-        if (!(state && state.game && state.game.status === "in_progress")) {
+        const status = state && state.game ? state.game.status : null;
+        if (status !== "in_progress") {
           // Ensure all gameplay sections are hidden.
           document.getElementById("rallySection")?.classList.add("hidden");
           document.getElementById("interviewSection")?.classList.add("hidden");

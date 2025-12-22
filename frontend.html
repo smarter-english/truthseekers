@@ -307,6 +307,46 @@
         opacity: 1;
         transform: translateX(0);
       }
+
+      /* Waiting screen (after join, before game starts) */
+      #waitingSection {
+        margin-top: 14px;
+        padding: 14px 12px;
+        border: 1px solid #e5e5e5;
+        border-radius: 10px;
+        background: #fafafa;
+        text-align: center;
+      }
+      #waitingSection .big {
+        font-size: 18px;
+        font-weight: 800;
+        margin-bottom: 6px;
+      }
+      #waitingSection .hint {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #444;
+        line-height: 1.35;
+      }
+      #waitingSection .sub {
+        margin-top: 6px;
+        font-size: 12px;
+        color: #666;
+      }
+      #waitingSection .spinner {
+        margin: 10px auto 0;
+        width: 22px;
+        height: 22px;
+        border: 3px solid #ddd;
+        border-top-color: #888;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
     </style>
   </head>
   <body>
@@ -394,6 +434,18 @@
           class="small hidden"
           style="white-space: pre-wrap; margin: 8px 0"
         ></div>
+
+        <div id="waitingSection" class="hidden">
+          <div class="big">✅ You’re checked in</div>
+          <div class="hint">
+            You’re on the right page. Please keep this page open and wait for
+            your teacher to start the game.
+          </div>
+          <div class="sub">
+            Game code: <strong><span id="waitingGameCode"></span></strong>
+          </div>
+          <div class="spinner" aria-label="Loading"></div>
+        </div>
 
         <div id="rallySection" class="section-card hidden">
           <h3>Rally</h3>
@@ -624,6 +676,34 @@
         } else {
           headerEl.style.backgroundImage = "";
         }
+      }
+
+      function updateWaitingUI(state) {
+        const waiting = document.getElementById("waitingSection");
+        const codeEl = document.getElementById("waitingGameCode");
+        if (!waiting) return;
+
+        const inProgress =
+          state && state.game && state.game.status === "in_progress";
+
+        if (codeEl && state && state.game && state.game.code) {
+          codeEl.textContent = state.game.code;
+        }
+
+        if (!inProgress) {
+          // show waiting
+          waiting.classList.remove("hidden");
+
+          // hide gameplay sections to avoid confusion
+          document.getElementById("rallySection")?.classList.add("hidden");
+          document.getElementById("interviewSection")?.classList.add("hidden");
+          document.getElementById("feedbackSection")?.classList.add("hidden");
+          document.getElementById("voteSection")?.classList.add("hidden");
+          return;
+        }
+
+        // game started
+        waiting.classList.add("hidden");
       }
 
       function formatName(displayName, characterName) {
@@ -1075,6 +1155,7 @@
         lastState = state;
         maybeShowGameOverModal(state);
         updateCharacterUI(state);
+        updateWaitingUI(state);
 
         const nameHeaderEl = document.getElementById("displayNameHeader");
         if (nameHeaderEl && state.player) {
@@ -1203,6 +1284,7 @@
         updateCharacterUI(state);
         maybeShowGameOverModal(state);
         document.getElementById("viewGameCode").textContent = state.game.code;
+        updateWaitingUI(state);
 
         // Update round/phase label in header for initial render
         const roundPhaseEl = document.getElementById("roundPhaseLabel");

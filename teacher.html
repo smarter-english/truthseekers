@@ -326,7 +326,23 @@
         </button>
       </div>
 
-      <h3>Players</h3>
+      <h3
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        "
+      >
+        <span>Players</span>
+        <button
+          id="sortPlayersBtn"
+          class="secondary"
+          onclick="togglePlayerSort()"
+        >
+          Sort: Name
+        </button>
+      </h3>
       <div id="playersTable"></div>
 
       <h3>Pods</h3>
@@ -349,6 +365,7 @@
       let eliminationTimeoutId = null;
       let showRoles = false;
       let lastSeenFinishedForGame = {};
+      let playerSortMode = "name"; // 'name' | 'pod'
 
       async function loadGames() {
         const gamesListDiv = document.getElementById("gamesList");
@@ -715,6 +732,17 @@
         }
       }
 
+      function togglePlayerSort() {
+        playerSortMode = playerSortMode === "pod" ? "name" : "pod";
+
+        const btn = document.getElementById("sortPlayersBtn");
+        if (btn)
+          btn.textContent =
+            playerSortMode === "pod" ? "Sort: Pod" : "Sort: Name";
+
+        if (currentDebugData) renderDebug(currentDebugData);
+      }
+
       function showEliminationPopup(players) {
         const popup = document.getElementById("eliminationPopup");
         const cardsEl = document.getElementById("eliminationCards");
@@ -983,7 +1011,27 @@
             assignmentsByPlayer[key][a.subround] = a.interviewee_name;
           });
 
-          data.players.forEach((p) => {
+          const sortedPlayers = [...data.players];
+
+          if (playerSortMode === "pod") {
+            sortedPlayers.sort((a, b) => {
+              const pa = (podByPlayerId[a.id] || "").toString();
+              const pb = (podByPlayerId[b.id] || "").toString();
+              if (pa < pb) return -1;
+              if (pa > pb) return 1;
+              const na = (a.display_name || "").toString().toLowerCase();
+              const nb = (b.display_name || "").toString().toLowerCase();
+              return na.localeCompare(nb);
+            });
+          } else {
+            sortedPlayers.sort((a, b) => {
+              const na = (a.display_name || "").toString().toLowerCase();
+              const nb = (b.display_name || "").toString().toLowerCase();
+              return na.localeCompare(nb);
+            });
+          }
+
+          sortedPlayers.forEach((p) => {
             const podLabel = podByPlayerId[p.id] || "";
             const a = assignmentsByPlayer[p.id] || {};
             const t1 = a[1] || "";

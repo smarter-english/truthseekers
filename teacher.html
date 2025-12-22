@@ -431,6 +431,51 @@
       let lastSeenFinishedForGame = {};
       let playerSortMode = "name"; // 'name' | 'pod'
 
+      // --- shared helpers (reduce duplicate fetch/error handling) ---
+      function getJoinUrl(code) {
+        return (
+          window.location.origin +
+          "/frontend.html?code=" +
+          encodeURIComponent(code)
+        );
+      }
+
+      function ghostifyFilename(filename) {
+        if (!filename) return filename;
+        if (filename.startsWith("ghost_")) return filename;
+        return `ghost_${filename}`;
+      }
+
+      // Prefer Character (Player) for teacher clarity
+      function formatDebugName(displayName, characterName) {
+        if (characterName) {
+          return `${characterName} (${displayName})`;
+        }
+        return displayName;
+      }
+
+      async function apiFetch(
+        path,
+        { method = "GET", body = null, json = true } = {}
+      ) {
+        const opts = { method, headers: {} };
+        if (body !== null) {
+          opts.headers["Content-Type"] = "application/json";
+          opts.body = JSON.stringify(body);
+        }
+        const res = await fetch(API + path, opts);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || `HTTP ${res.status}`);
+        }
+        return json ? await res.json() : await res.text();
+      }
+
+      async function refreshDebugAndGames() {
+        await refreshDebug();
+        await loadGames();
+      }
+
       async function loadGames() {
         const gamesListDiv = document.getElementById("gamesList");
         gamesListDiv.innerHTML = "Loading games…";
@@ -528,15 +573,11 @@
 
       async function createGame() {
         try {
-          const res = await fetch(API + "/games", { method: "POST" });
-          if (!res.ok) {
-            alert("Could not create game");
-            return;
-          }
+          await apiFetch("/games", { method: "POST" });
           await loadGames();
         } catch (err) {
           console.error(err);
-          alert("Error creating game (see console).");
+          alert("Error creating game: " + err.message);
         }
       }
 
@@ -550,15 +591,7 @@
         )
           return;
         try {
-          const res = await fetch(API + `/games/${gameId}/start`, {
-            method: "POST",
-          });
-          if (!res.ok) {
-            const text = await res.text();
-            console.error(text);
-            alert("Could not start game: " + text);
-            return;
-          }
+          await apiFetch(`/games/${gameId}/start`, { method: "POST" });
           await loadGames();
           await openDebug(gameId);
         } catch (err) {
@@ -595,19 +628,11 @@
       async function setSubround(subround) {
         if (!currentGameId) return;
         try {
-          const res = await fetch(API + `/games/${currentGameId}/subround`, {
+          await apiFetch(`/games/${currentGameId}/subround`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ subround }),
+            body: { subround },
           });
-          if (!res.ok) {
-            const text = await res.text();
-            console.error(text);
-            alert("Could not set subround: " + text);
-            return;
-          }
-          await refreshDebug();
-          await loadGames();
+          await refreshDebugAndGames();
         } catch (err) {
           console.error(err);
           alert("Error setting subround (see console).");
@@ -617,19 +642,11 @@
       async function setPhase(phase) {
         if (!currentGameId) return;
         try {
-          const res = await fetch(API + `/games/${currentGameId}/phase`, {
+          await apiFetch(`/games/${currentGameId}/phase`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ phase }),
+            body: { phase },
           });
-          if (!res.ok) {
-            const text = await res.text();
-            console.error(text);
-            alert("Could not set phase: " + text);
-            return;
-          }
-          await refreshDebug();
-          await loadGames();
+          await refreshDebugAndGames();
         } catch (err) {
           console.error(err);
           alert("Error setting phase (see console).");
@@ -642,17 +659,10 @@
           return;
 
         try {
-          const res = await fetch(API + `/games/${currentGameId}/next-round`, {
+          await apiFetch(`/games/${currentGameId}/next-round`, {
             method: "POST",
           });
-          if (!res.ok) {
-            const text = await res.text();
-            console.error(text);
-            alert("Could not create next round: " + text);
-            return;
-          }
-          await refreshDebug();
-          await loadGames();
+          await refreshDebugAndGames();
         } catch (err) {
           console.error(err);
           alert("Error creating next round (see console).");
@@ -669,24 +679,13 @@
           return;
 
         try {
-          const res = await fetch(
-            API + `/games/${currentGameId}/force-logout`,
-            {
-              method: "POST",
-            }
-          );
-          if (!res.ok) {
-            const text = await res.text();
-            console.error(text);
-            alert("Could not reset devices: " + text);
-            return;
-          }
-          const out = await res.json();
+          const out = await apiFetch(`/games/${currentGameId}/force-logout`, {
+            method: "POST",
+          });
           alert(
             `Reset signal sent (seq: ${out.force_logout_seq}). Players will reset on their next poll.`
           );
-          await refreshDebug();
-          await loadGames();
+          await refreshDebugAndGames();
         } catch (err) {
           console.error(err);
           alert("Error resetting devices (see console). ");
@@ -699,20 +698,10 @@
         if (!confirm("Mark " + label + " as a ghost?")) return;
 
         try {
-          const res = await fetch(
-            API + `/games/${currentGameId}/players/${playerId}/ghost`,
-            {
-              method: "POST",
-            }
-          );
-          if (!res.ok) {
-            const text = await res.text();
-            console.error(text);
-            alert("Could not mark player as ghost: " + text);
-            return;
-          }
-          await refreshDebug();
-          await loadGames();
+          await apiFetch(`/games/${currentGameId}/players/${playerId}/ghost`, {
+            method: "POST",
+          });
+          await refreshDebugAndGames();
         } catch (err) {
           console.error(err);
           alert("Error marking player as ghost (see console).");
@@ -736,24 +725,11 @@
         }
 
         try {
-          const res = await fetch(
-            API + `/games/${currentGameId}/players/${playerId}/rename`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ display_name: cleaned }),
-            }
-          );
-
-          if (!res.ok) {
-            const text = await res.text();
-            console.error(text);
-            alert("Could not rename player: " + text);
-            return;
-          }
-
-          await refreshDebug();
-          await loadGames();
+          await apiFetch(`/games/${currentGameId}/players/${playerId}/rename`, {
+            method: "POST",
+            body: { display_name: cleaned },
+          });
+          await refreshDebugAndGames();
         } catch (err) {
           console.error(err);
           alert("Error renaming player (see console).");
@@ -767,18 +743,10 @@
           return;
 
         try {
-          const res = await fetch(
-            API + `/games/${currentGameId}/players/${playerId}/remove`,
-            { method: "POST" }
-          );
-          if (!res.ok) {
-            const text = await res.text();
-            console.error(text);
-            alert("Could not remove player: " + text);
-            return;
-          }
-          await refreshDebug();
-          await loadGames();
+          await apiFetch(`/games/${currentGameId}/players/${playerId}/remove`, {
+            method: "POST",
+          });
+          await refreshDebugAndGames();
         } catch (err) {
           console.error(err);
           alert("Error removing player (see console).");
@@ -814,12 +782,6 @@
 
         const list = Array.isArray(players) ? players : [];
         cardsEl.innerHTML = "";
-
-        function ghostifyFilename(filename) {
-          if (!filename) return filename;
-          if (filename.startsWith("ghost_")) return filename;
-          return `ghost_${filename}`;
-        }
 
         list.forEach((p) => {
           const wrap = document.createElement("div");
@@ -867,13 +829,6 @@
         }, 3000);
       }
 
-      function formatDebugName(displayName, characterName) {
-        if (characterName) {
-          return `${displayName} (${characterName})`;
-        }
-        return displayName;
-      }
-
       function closeGameOverModal() {
         const modal = document.getElementById("gameOverModal");
         if (modal) modal.classList.remove("show");
@@ -893,10 +848,7 @@
         }
 
         const code = currentDebugData.game.code;
-        const joinUrl =
-          window.location.origin +
-          "/frontend.html?code=" +
-          encodeURIComponent(code);
+        const joinUrl = getJoinUrl(code);
 
         // Update big link
         const linkEl = document.getElementById("joinLinkBig");
@@ -926,12 +878,6 @@
         card.className = "player-card";
 
         const img = document.createElement("img");
-
-        function ghostifyFilename(filename) {
-          if (!filename) return filename;
-          if (filename.startsWith("ghost_")) return filename;
-          return `ghost_${filename}`;
-        }
 
         // Prefer avatar file if present; use ghost version if eliminated
         if (player && player.character_avatar_file) {
@@ -1074,10 +1020,7 @@
         // Student join link (prefills code in frontend)
         const joinLinkEl = document.getElementById("joinLink");
         if (joinLinkEl && g && g.code) {
-          const joinUrl =
-            window.location.origin +
-            "/frontend.html?code=" +
-            encodeURIComponent(g.code);
+          const joinUrl = getJoinUrl(g.code);
           joinLinkEl.textContent = joinUrl;
         }
 

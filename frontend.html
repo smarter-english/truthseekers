@@ -551,6 +551,88 @@
       let lastSeenForceLogoutSeq = 0;
       let lastPodRenderKey = null;
       let lastSeenGameFinished = false;
+
+      // --- shared helpers (reduce duplication) ---
+      function ghostifyFilename(filename) {
+        if (!filename) return filename;
+        if (filename.startsWith("ghost_")) return filename;
+        return `ghost_${filename}`;
+      }
+
+      function ghostifyUrl(url) {
+        try {
+          if (!url) return url;
+          const parts = url.split("/");
+          const last = parts.pop();
+          if (!last) return url;
+          parts.push(ghostifyFilename(last));
+          return parts.join("/");
+        } catch (e) {
+          return url;
+        }
+      }
+
+      function buildAvatarUrl(player, useGhostAvatar) {
+        if (!player) return "";
+        if (player.character_avatar_url) {
+          return useGhostAvatar
+            ? ghostifyUrl(player.character_avatar_url)
+            : player.character_avatar_url;
+        }
+        if (player.character_avatar_file) {
+          const file = useGhostAvatar
+            ? ghostifyFilename(player.character_avatar_file)
+            : player.character_avatar_file;
+          return `./assets/icons/${file}`;
+        }
+        return "";
+      }
+
+      function buildAvatarCandidates(avatarUrl) {
+        if (!avatarUrl) return [];
+        const candidates = [avatarUrl];
+
+        // If it's a relative ./assets path, also try /assets
+        if (avatarUrl.startsWith("./assets/")) {
+          candidates.push(avatarUrl.replace("./assets/", "/assets/"));
+        }
+
+        // If it's an /assets path, also try ./assets
+        if (avatarUrl.startsWith("/assets/")) {
+          candidates.push("." + avatarUrl);
+        }
+
+        // If it isn't already absolute, try absolute against API
+        if (!/^https?:\/\//i.test(avatarUrl) && avatarUrl.startsWith("/")) {
+          candidates.push(`${API}${avatarUrl}`);
+        }
+        if (!/^https?:\/\//i.test(avatarUrl) && avatarUrl.startsWith("./")) {
+          candidates.push(`${API}${avatarUrl.substring(1)}`);
+        }
+
+        return Array.from(new Set(candidates));
+      }
+
+      function setImgSrcWithFallback(img, candidates) {
+        if (!img || !candidates || !candidates.length) return;
+        let idx = 0;
+        img.src = candidates[idx];
+        img.onerror = () => {
+          idx += 1;
+          if (idx < candidates.length) {
+            img.src = candidates[idx];
+            return;
+          }
+          img.onerror = null;
+        };
+      }
+
+      function hideGameplaySections() {
+        document.getElementById("rallySection")?.classList.add("hidden");
+        document.getElementById("interviewSection")?.classList.add("hidden");
+        document.getElementById("feedbackSection")?.classList.add("hidden");
+        document.getElementById("voteSection")?.classList.add("hidden");
+      }
       function closeGameOverModal() {
         const modal = document.getElementById("gameOverModal");
         if (modal) modal.classList.remove("show");
@@ -662,52 +744,13 @@
         const charName = state.player.character_name || "";
         let avatarUrl = "";
 
-        // If the player is eliminated, prefer a "ghost_" version of the avatar.
         const useGhostAvatar = state.player && state.player.is_alive === false;
-
-        // Helper to prefix ghost_ to a filename only (not a whole path)
-        function ghostifyFilename(filename) {
-          if (!filename) return filename;
-          if (filename.startsWith("ghost_")) return filename;
-          return `ghost_${filename}`;
-        }
-
-        // Helper to prefix ghost_ to the basename of a URL/path
-        function ghostifyUrl(url) {
-          try {
-            if (!url) return url;
-            const parts = url.split("/");
-            const last = parts.pop();
-            if (!last) return url;
-            parts.push(ghostifyFilename(last));
-            return parts.join("/");
-          } catch (e) {
-            return url;
-          }
-        }
-
-        if (state.player.character_avatar_url) {
-          avatarUrl = useGhostAvatar
-            ? ghostifyUrl(state.player.character_avatar_url)
-            : state.player.character_avatar_url;
-        } else if (state.player.character_avatar_file) {
-          const file = useGhostAvatar
-            ? ghostifyFilename(state.player.character_avatar_file)
-            : state.player.character_avatar_file;
-          avatarUrl = `./assets/icons/${file}`;
-        }
-
-        if (!charName && !avatarUrl) {
-          headerEl.style.backgroundImage = "";
-          nameEl.textContent = "";
-          return;
-        }
+        avatarUrl = buildAvatarUrl(state.player, useGhostAvatar);
 
         nameEl.textContent =
           (charName || "") + (state.player.is_alive ? "" : " 👻");
 
         if (avatarUrl) {
-          // Apply avatar as a centered background image on the header bar
           headerEl.style.backgroundImage = `url('${avatarUrl}')`;
         } else {
           headerEl.style.backgroundImage = "";
@@ -731,10 +774,7 @@
           waiting.classList.remove("hidden");
 
           // hide gameplay sections to avoid confusion
-          document.getElementById("rallySection")?.classList.add("hidden");
-          document.getElementById("interviewSection")?.classList.add("hidden");
-          document.getElementById("feedbackSection")?.classList.add("hidden");
-          document.getElementById("voteSection")?.classList.add("hidden");
+          hideGameplaySections();
           return;
         }
 
@@ -763,10 +803,7 @@
 
         // Hide waiting + gameplay sections
         document.getElementById("waitingSection")?.classList.add("hidden");
-        document.getElementById("rallySection")?.classList.add("hidden");
-        document.getElementById("interviewSection")?.classList.add("hidden");
-        document.getElementById("feedbackSection")?.classList.add("hidden");
-        document.getElementById("voteSection")?.classList.add("hidden");
+        hideGameplaySections();
 
         const winner = state.game && state.game.winning_side;
         if (titleEl) {
@@ -802,69 +839,13 @@
         // avatar
         const img = document.createElement("img");
 
-        // Match banner logic: prefer URL if provided; otherwise use local file under /assets/icons/
         const useGhostAvatar = player && player.is_alive === false;
+        const avatarUrl = buildAvatarUrl(player, useGhostAvatar);
+        const candidates = buildAvatarCandidates(avatarUrl);
 
-        function ghostifyFilename(filename) {
-          if (!filename) return filename;
-          if (filename.startsWith("ghost_")) return filename;
-          return `ghost_${filename}`;
-        }
-
-        function ghostifyUrl(url) {
-          try {
-            if (!url) return url;
-            const parts = url.split("/");
-            const last = parts.pop();
-            if (!last) return url;
-            parts.push(ghostifyFilename(last));
-            return parts.join("/");
-          } catch (e) {
-            return url;
-          }
-        }
-
-        let avatarUrl = "";
-        if (player.character_avatar_url) {
-          avatarUrl = useGhostAvatar
-            ? ghostifyUrl(player.character_avatar_url)
-            : player.character_avatar_url;
-        } else if (player.character_avatar_file) {
-          const file = useGhostAvatar
-            ? ghostifyFilename(player.character_avatar_file)
-            : player.character_avatar_file;
-          avatarUrl = `./assets/icons/${file}`;
-        }
-
-        if (avatarUrl) {
-          // Try a few variants because relative paths can behave differently depending on route.
-          const candidates = [];
-          candidates.push(avatarUrl);
-
-          // If it's a relative ./assets path, also try /assets
-          if (avatarUrl.startsWith("./assets/")) {
-            candidates.push(avatarUrl.replace("./assets/", "/assets/"));
-          }
-
-          // If it's an /assets path, also try ./assets
-          if (avatarUrl.startsWith("/assets/")) {
-            candidates.push("." + avatarUrl);
-          }
-
-          // If it isn't already absolute, try absolute against API
-          if (!/^https?:\/\//i.test(avatarUrl) && avatarUrl.startsWith("/")) {
-            candidates.push(`${API}${avatarUrl}`);
-          }
-          if (!/^https?:\/\//i.test(avatarUrl) && avatarUrl.startsWith("./")) {
-            candidates.push(`${API}${avatarUrl.substring(1)}`);
-          }
-
-          // De-dupe
-          const uniq = Array.from(new Set(candidates));
-          let idx = 0;
-
+        if (candidates.length) {
           img.alt = player.character_name || "avatar";
-          img.src = uniq[idx];
+          setImgSrcWithFallback(img, candidates);
 
           debugLog(
             `card avatar for ${player.display_name || "?"}: ` +
@@ -873,22 +854,9 @@
                 character_avatar_url: player.character_avatar_url || null,
                 character_avatar_file: player.character_avatar_file || null,
                 chosen: avatarUrl,
-                tried: uniq,
+                tried: candidates,
               })
           );
-
-          img.onerror = () => {
-            idx += 1;
-            if (idx < uniq.length) {
-              img.src = uniq[idx];
-              return;
-            }
-            debugLog(
-              `FAILED avatar for ${player.display_name || "?"} after trying: ` +
-                uniq.join(", ")
-            );
-            img.onerror = null;
-          };
         } else {
           debugLog(
             `NO avatar fields for ${player.display_name || "?"}: ` +
@@ -972,18 +940,10 @@
           img.style.objectFit = "contain";
           img.style.borderRadius = "0";
 
-          // Use ghost avatar filename if eliminated
-          function ghostifyFilename(filename) {
-            if (!filename) return filename;
-            if (filename.startsWith("ghost_")) return filename;
-            return `ghost_${filename}`;
-          }
-
-          if (p.character_avatar_file) {
-            const file = ghostifyFilename(p.character_avatar_file);
-            img.src = `./assets/icons/${file}`;
-          } else if (p.character_avatar_url) {
-            img.src = p.character_avatar_url;
+          const avatarUrl = buildAvatarUrl(p, true); // eliminated => always ghost
+          const candidates = buildAvatarCandidates(avatarUrl);
+          if (candidates.length) {
+            setImgSrcWithFallback(img, candidates);
           }
           img.alt = p.character_name || "avatar";
 
@@ -1383,10 +1343,7 @@
         const status = state && state.game ? state.game.status : null;
         if (status !== "in_progress") {
           // Ensure all gameplay sections are hidden.
-          document.getElementById("rallySection")?.classList.add("hidden");
-          document.getElementById("interviewSection")?.classList.add("hidden");
-          document.getElementById("feedbackSection")?.classList.add("hidden");
-          document.getElementById("voteSection")?.classList.add("hidden");
+          hideGameplaySections();
           return;
         }
 

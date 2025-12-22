@@ -1157,6 +1157,12 @@
         updateCharacterUI(state);
         updateWaitingUI(state);
 
+        // If the game hasn't started yet, don't render or switch gameplay tabs.
+        // (Otherwise phase 'rally' will force the rally section visible.)
+        if (!(state && state.game && state.game.status === "in_progress")) {
+          return;
+        }
+
         const nameHeaderEl = document.getElementById("displayNameHeader");
         if (nameHeaderEl && state.player) {
           nameHeaderEl.textContent = state.player.display_name;
@@ -1285,6 +1291,16 @@
         maybeShowGameOverModal(state);
         document.getElementById("viewGameCode").textContent = state.game.code;
         updateWaitingUI(state);
+
+        // If the game hasn't started yet, show only the waiting screen.
+        if (!(state && state.game && state.game.status === "in_progress")) {
+          // Ensure all gameplay sections are hidden.
+          document.getElementById("rallySection")?.classList.add("hidden");
+          document.getElementById("interviewSection")?.classList.add("hidden");
+          document.getElementById("feedbackSection")?.classList.add("hidden");
+          document.getElementById("voteSection")?.classList.add("hidden");
+          return;
+        }
 
         // Update round/phase label in header for initial render
         const roundPhaseEl = document.getElementById("roundPhaseLabel");

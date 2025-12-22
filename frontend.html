@@ -1402,6 +1402,15 @@
         const membersEl = document.getElementById("podMembers");
         if (!section || !labelEl || !membersEl) return;
 
+        // Before the game starts, keep the rally section hidden to avoid confusing students.
+        const inProgress =
+          state && state.game && state.game.status === "in_progress";
+        if (!inProgress) {
+          section.classList.add("hidden");
+          section.style.display = "none";
+          return;
+        }
+
         if (state.pod && state.pod.label) {
           // Compute rally point from Pod label
           const podLabel = state.pod.label; // e.g. "Pod A"

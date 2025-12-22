@@ -462,9 +462,9 @@ async function createFirstRoundWithMutations(gameId) {
     [round.round_number, gameId]
   );
 
-  // pick 4 random questions for this round
+  // pick 3 random questions for this round
   const qRes = await pool.query(
-    'SELECT id FROM questions ORDER BY random() LIMIT 4'
+    'SELECT id FROM questions ORDER BY random() LIMIT 3'
   );
   const selectedQuestions = qRes.rows; // [{id: ...}, ...]
 
@@ -547,9 +547,9 @@ async function createNextRoundWithMutations(gameId) {
     [round.round_number, gameId]
   );
 
-  // pick 4 random questions for this round
+  // pick 3 random questions for this round
   const qRes = await pool.query(
-    'SELECT id FROM questions ORDER BY random() LIMIT 4'
+    'SELECT id FROM questions ORDER BY random() LIMIT 3'
   );
   const selectedQuestions = qRes.rows;
 

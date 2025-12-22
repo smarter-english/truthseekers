@@ -243,6 +243,50 @@
         justify-content: flex-end;
         gap: 8px;
       }
+
+      /* Join QR modal */
+      #joinQrModal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10001;
+      }
+      #joinQrModal.show {
+        display: flex;
+      }
+      #joinQrModal .panel {
+        background: #fff;
+        border-radius: 12px;
+        width: min(720px, 94vw);
+        max-height: 90vh;
+        overflow: auto;
+        padding: 18px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        text-align: center;
+      }
+      #joinQrModal .panel h2 {
+        margin: 0 0 8px;
+      }
+      #joinQrModal .joinLink {
+        font-size: 12px;
+        color: #444;
+        word-break: break-all;
+        margin-top: 10px;
+      }
+      #joinQrModal .qrBig {
+        display: flex;
+        justify-content: center;
+        margin-top: 12px;
+      }
+      #joinQrModal .actions {
+        margin-top: 16px;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+      }
     </style>
   </head>
   <body>
@@ -284,6 +328,23 @@
       </div>
     </div>
 
+    <div
+      id="joinQrModal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="joinQrTitle"
+    >
+      <div class="panel">
+        <h2 id="joinQrTitle">Join this game</h2>
+        <div class="small">Scan this QR code with student iPads.</div>
+        <div class="qrBig" id="qrBig"></div>
+        <div class="joinLink" id="joinLinkBig"></div>
+        <div class="actions">
+          <button class="secondary" onclick="closeJoinQrModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div id="games" class="section">
       <h2>Games</h2>
       <button class="secondary" onclick="createGame()">+ New Game</button>
@@ -295,12 +356,15 @@
       <h2>Game Detail</h2>
       <div id="gameInfo"></div>
       <div style="margin-top: 10px">
-        <div class="small">Student join link:</div>
-        <div id="joinLink" class="small" style="word-break: break-all"></div>
-        <div style="margin-top: 6px">
-          <div class="small">Scan to join:</div>
-          <div id="qrContainer"></div>
-        </div>
+        <div class="small">Students join with QR code:</div>
+        <button class="primary" type="button" onclick="openJoinQrModal()">
+          Show large QR
+        </button>
+        <div
+          id="joinLink"
+          class="small"
+          style="word-break: break-all; margin-top: 6px"
+        ></div>
       </div>
       <div style="margin-top: 8px">
         <button class="secondary" onclick="setPhase('rally')">Rally</button>
@@ -815,6 +879,48 @@
         if (modal) modal.classList.remove("show");
       }
 
+      function openJoinQrModal() {
+        const modal = document.getElementById("joinQrModal");
+        if (!modal) return;
+        // Ensure we have fresh debug data so the code is correct
+        if (
+          !currentDebugData ||
+          !currentDebugData.game ||
+          !currentDebugData.game.code
+        ) {
+          alert("Open a game first.");
+          return;
+        }
+
+        const code = currentDebugData.game.code;
+        const joinUrl =
+          window.location.origin +
+          "/frontend.html?code=" +
+          encodeURIComponent(code);
+
+        // Update big link
+        const linkEl = document.getElementById("joinLinkBig");
+        if (linkEl) linkEl.textContent = joinUrl;
+
+        // Rebuild big QR
+        const qrBig = document.getElementById("qrBig");
+        if (qrBig) {
+          qrBig.innerHTML = "";
+          if (window.QRCode) {
+            new QRCode(qrBig, { text: joinUrl, width: 360, height: 360 });
+          } else {
+            qrBig.textContent = "QR library not loaded.";
+          }
+        }
+
+        modal.classList.add("show");
+      }
+
+      function closeJoinQrModal() {
+        const modal = document.getElementById("joinQrModal");
+        if (modal) modal.classList.remove("show");
+      }
+
       function createSmallPlayerCard(player) {
         const card = document.createElement("div");
         card.className = "player-card";
@@ -965,27 +1071,14 @@
       </div>
     `;
 
-        // Student join link + QR code (prefills code in frontend)
+        // Student join link (prefills code in frontend)
         const joinLinkEl = document.getElementById("joinLink");
-        const qrContainer = document.getElementById("qrContainer");
-        if (joinLinkEl && qrContainer && g && g.code) {
+        if (joinLinkEl && g && g.code) {
           const joinUrl =
             window.location.origin +
             "/frontend.html?code=" +
             encodeURIComponent(g.code);
           joinLinkEl.textContent = joinUrl;
-
-          // Rebuild QR each refresh to avoid duplicates
-          qrContainer.innerHTML = "";
-          if (window.QRCode) {
-            new QRCode(qrContainer, {
-              text: joinUrl,
-              width: 140,
-              height: 140,
-            });
-          } else {
-            qrContainer.textContent = "QR library not loaded.";
-          }
         }
 
         // Players table

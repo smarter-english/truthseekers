@@ -679,6 +679,31 @@
         }
       }
 
+      async function removePlayer(playerId, playerLabel) {
+        if (!currentGameId) return;
+        const label = playerLabel || "player " + playerId;
+        if (!confirm(`REMOVE ${label} from the game? This cannot be undone.`))
+          return;
+
+        try {
+          const res = await fetch(
+            API + `/games/${currentGameId}/players/${playerId}/remove`,
+            { method: "POST" }
+          );
+          if (!res.ok) {
+            const text = await res.text();
+            console.error(text);
+            alert("Could not remove player: " + text);
+            return;
+          }
+          await refreshDebug();
+          await loadGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error removing player (see console).");
+        }
+      }
+
       function toggleRoles() {
         showRoles = !showRoles;
         const btn = document.getElementById("toggleRolesBtn");
@@ -987,6 +1012,11 @@
             actionHtml += `<button class="secondary" onclick='renamePlayer(${
               p.id
             }, ${JSON.stringify(p.display_name || "")})'>Rename</button>`;
+
+            // Remove is always available (admin cleanup)
+            actionHtml += ` <button class="danger" onclick='removePlayer(${
+              p.id
+            }, ${JSON.stringify(fullName)})'>Remove</button>`;
 
             if (p.is_alive) {
               const confirmLabel = fullName;

@@ -1531,6 +1531,129 @@ app.post('/games/:gameId/players/:playerId/rename', async (req, res) => {
     res.status(500).json({ error: 'Failed to rename player', detail: err.message });
   }
 });
+
+// teacher: remove a player from the game (admin cleanup)
+// This deletes the player row and all dependent rows scoped to this game.
+app.post('/games/:gameId/players/:playerId/remove', async (req, res) => {
+  const gameId = Number(req.params.gameId);
+  const playerId = Number(req.params.playerId);
+
+  if (!gameId || !playerId) {
+    return res.status(400).json({ error: 'Invalid gameId or playerId' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Ensure game exists
+    const gameRes = await client.query('SELECT id, status, last_eliminated_player_id FROM games WHERE id = $1', [gameId]);
+    const game = gameRes.rows[0];
+    if (!game) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Ensure player belongs to this game
+    const pRes = await client.query(
+      'SELECT id, display_name, role, is_alive FROM game_players WHERE id = $1 AND game_id = $2',
+      [playerId, gameId]
+    );
+    const player = pRes.rows[0];
+    if (!player) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Player not found in this game' });
+    }
+
+    // Remove from pods (pod_members references game_players)
+    await client.query('DELETE FROM pod_members WHERE game_player_id = $1', [playerId]);
+
+    // Remove baddie mutations for this player in this game
+    await client.query(
+      `DELETE FROM baddie_mutations bm
+       USING rounds r
+       WHERE bm.round_id = r.id
+         AND r.game_id = $1
+         AND bm.game_player_id = $2`,
+      [gameId, playerId]
+    );
+
+    // Remove votes in this game where this player was voter or target
+    await client.query(
+      `DELETE FROM votes v
+       USING rounds r
+       WHERE v.round_id = r.id
+         AND r.game_id = $1
+         AND (v.voter_player_id = $2 OR v.target_player_id = $2)`,
+      [gameId, playerId]
+    );
+
+    // Remove interview answers for interviews in this game involving this player
+    await client.query(
+      `DELETE FROM interview_answers ia
+       USING interviews i, rounds r
+       WHERE ia.interview_id = i.id
+         AND i.round_id = r.id
+         AND r.game_id = $1
+         AND (i.interviewer_player_id = $2 OR i.interviewee_player_id = $2)`,
+      [gameId, playerId]
+    );
+
+    // Remove interviews in this game involving this player
+    await client.query(
+      `DELETE FROM interviews i
+       USING rounds r
+       WHERE i.round_id = r.id
+         AND r.game_id = $1
+         AND (i.interviewer_player_id = $2 OR i.interviewee_player_id = $2)`,
+      [gameId, playerId]
+    );
+
+    // Remove interview assignments in this game involving this player
+    await client.query(
+      `DELETE FROM interview_assignments a
+       USING rounds r
+       WHERE a.round_id = r.id
+         AND r.game_id = $1
+         AND (a.interviewer_player_id = $2 OR a.interviewee_player_id = $2)`,
+      [gameId, playerId]
+    );
+
+    // Remove profile rows
+    await client.query('DELETE FROM player_profiles WHERE game_player_id = $1', [playerId]);
+
+    // If the last eliminated pointer references this player, clear it so /me/current-state doesn't try to fetch a missing row.
+    await client.query(
+      `UPDATE games
+       SET last_eliminated_player_id = NULL
+       WHERE id = $1 AND last_eliminated_player_id = $2`,
+      [gameId, playerId]
+    );
+
+    // Finally delete the player
+    await client.query('DELETE FROM game_players WHERE id = $1 AND game_id = $2', [playerId, gameId]);
+
+    await client.query('COMMIT');
+
+    // Alive counts changed; end game if needed
+    const g2 = await pool.query('SELECT status FROM games WHERE id = $1', [gameId]);
+    if (g2.rows[0] && g2.rows[0].status === 'in_progress') {
+      await checkAndFinalizeGameIfNeeded(gameId);
+    }
+
+    res.json({
+      ok: true,
+      removed_player_id: playerId,
+      removed_display_name: player.display_name,
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error(err);
+    res.status(500).json({ error: 'Failed to remove player', detail: err.message });
+  } finally {
+    client.release();
+  }
+});
 // teacher: mark a player as a ghost (eliminate)
 app.post('/games/:gameId/players/:playerId/ghost', async (req, res) => {
   const gameId = Number(req.params.gameId);

@@ -391,10 +391,6 @@
           autocapitalize="characters"
           spellcheck="false"
         />
-        function normalizeGameCodeInput() { const el =
-        document.getElementById("gameCode"); if (!el) return; // Keep letters
-        only, force uppercase el.value = el.value .toUpperCase()
-        .replace(/[^A-Z]/g, ""); }
 
         <p><strong>Your Name:</strong></p>
         <input id="playerName" placeholder="e.g. Maria" />
@@ -774,6 +770,13 @@
         }
       }
 
+      function normalizeGameCodeInput() {
+        const el = document.getElementById("gameCode");
+        if (!el) return;
+        // Letters only, force uppercase
+        el.value = el.value.toUpperCase().replace(/[^A-Z]/g, "");
+      }
+
       // --- lightweight in-page debug (use ?debug=1) ---
       const DEBUG = (() => {
         try {
@@ -1126,6 +1129,10 @@
       // Try auto-restore on page load + auto polling every 3 seconds
       window.onload = () => {
         prefillGameCodeFromQuery();
+        const gameCodeInput = document.getElementById("gameCode");
+        if (gameCodeInput) {
+          gameCodeInput.addEventListener("input", normalizeGameCodeInput);
+        }
         const stored = localStorage.getItem("truthseekers-token");
         const storedGame = localStorage.getItem("truthseekers-gamecode");
         if (stored && storedGame) {
@@ -1990,6 +1997,3 @@
     </script>
   </body>
 </html>
-
-const gameCodeInput = document.getElementById("gameCode"); if (gameCodeInput) {
-gameCodeInput.addEventListener("input", normalizeGameCodeInput); }

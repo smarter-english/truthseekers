@@ -1708,8 +1708,6 @@
         const container = document.getElementById("feedbackContent");
         if (!section || !container) return;
 
-        container.innerHTML = "";
-
         // Prefer server-provided interviews for the current round
         const s = state || lastState;
         const interviews = s && s.myInterviews ? s.myInterviews : [];
@@ -1722,6 +1720,8 @@
           return;
         }
         lastFeedbackRenderKey = key;
+
+        container.innerHTML = "";
 
         if (!interviews.length) {
           section.classList.add("hidden");

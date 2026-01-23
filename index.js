@@ -69,6 +69,21 @@ function shuffleArray(arr) {
   return a;
 }
 
+function normalizeGameCode(code) {
+  if (!code) return '';
+  return String(code).toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+function generateLetterCode(length = 6) {
+  // A–Z only
+  const bytes = crypto.randomBytes(length);
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    out += String.fromCharCode(65 + (bytes[i] % 26));
+  }
+  return out;
+}
+
 async function createPodsAndAssignmentsForRound(gameId, roundId) {
   // get all players (alive + ghosts)
   const playersRes = await pool.query(
@@ -666,20 +681,41 @@ app.get('/health', (req, res) => {
 
 // create game (teacher)
 app.post('/games', async (req, res) => {
-  const code = crypto.randomBytes(3).toString('hex').toUpperCase(); // e.g. 'A3F9BC'
-  const { rows } = await pool.query(
-    `INSERT INTO games (code, status)
-     VALUES ($1, 'lobby')
-     RETURNING id, code, status`,
-    [code]
-  );
-  res.json(rows[0]);
+  // letters-only code for easier classroom entry
+  let lastErr = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const code = generateLetterCode(6);
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO games (code, status)
+         VALUES ($1, 'lobby')
+         RETURNING id, code, status`,
+        [code]
+      );
+      return res.json(rows[0]);
+    } catch (err) {
+      // unique_violation
+      if (err && err.code === '23505') {
+        lastErr = err;
+        continue;
+      }
+      console.error(err);
+      return res.status(500).json({ error: 'Failed to create game', detail: err.message });
+    }
+  }
+  console.error(lastErr);
+  return res.status(500).json({ error: 'Failed to create unique game code' });
 });
 
 // join game (student)
 app.post('/games/:code/join', async (req, res) => {
   const { display_name } = req.body;
-  const { code } = req.params;
+  const rawCode = req.params.code;
+  const code = normalizeGameCode(rawCode);
+
+  if (!code || code.length !== 6) {
+    return res.status(400).json({ error: 'Invalid game code' });
+  }
 
   if (!display_name) {
     return res.status(400).json({ error: 'display_name required' });
@@ -708,7 +744,11 @@ app.post('/games/:code/join', async (req, res) => {
 
 // get game info + players (teacher view)
 app.get('/games/:code', async (req, res) => {
-  const { code } = req.params;
+  const code = normalizeGameCode(req.params.code);
+
+  if (!code || code.length !== 6) {
+    return res.status(400).json({ error: 'Invalid game code' });
+  }
 
   const gameRes = await pool.query('SELECT * FROM games WHERE code = $1', [code]);
   const game = gameRes.rows[0];

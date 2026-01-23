@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <meta charset="UTF-8" />
@@ -130,7 +130,8 @@
       }
       #playerEliminationPopup.show {
         display: block;
-        animation: playerFadeSlideDown 0.25s ease-out,
+        animation:
+          playerFadeSlideDown 0.25s ease-out,
           playerFadeOut 0.4s ease-out 2.6s forwards;
       }
       #playerEliminationPopup .skull {
@@ -301,7 +302,9 @@
         margin-top: 10px;
         opacity: 0;
         transform: translateX(10px);
-        transition: opacity 0.25s ease, transform 0.25s ease;
+        transition:
+          opacity 0.25s ease,
+          transform 0.25s ease;
       }
       .section-card.visible {
         opacity: 1;
@@ -381,7 +384,17 @@
       <!-- Join Form -->
       <div id="joinForm">
         <p><strong>Enter Game Code:</strong></p>
-        <input id="gameCode" placeholder="e.g. 8C01C0" />
+        <input
+          id="gameCode"
+          placeholder="e.g. ABCDEF"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+        />
+        function normalizeGameCodeInput() { const el =
+        document.getElementById("gameCode"); if (!el) return; // Keep letters
+        only, force uppercase el.value = el.value .toUpperCase()
+        .replace(/[^A-Z]/g, ""); }
 
         <p><strong>Your Name:</strong></p>
         <input id="playerName" placeholder="e.g. Maria" />
@@ -590,7 +603,8 @@
           const targets = (state && state.eligibleTargets) || [];
           const tKey = targets
             .map(
-              (t) => `${t.id}:${t.display_name || ""}:${t.character_name || ""}`
+              (t) =>
+                `${t.id}:${t.display_name || ""}:${t.character_name || ""}`,
             )
             .join(";");
           return `${aliveFlag}::${tKey}`;
@@ -902,7 +916,7 @@
                 character_avatar_file: player.character_avatar_file || null,
                 chosen: avatarUrl,
                 tried: candidates,
-              })
+              }),
           );
         } else {
           debugLog(
@@ -911,7 +925,7 @@
                 is_alive: player.is_alive,
                 character_avatar_url: player.character_avatar_url || null,
                 character_avatar_file: player.character_avatar_file || null,
-              })
+              }),
           );
         }
 
@@ -966,8 +980,8 @@
         const list = Array.isArray(players)
           ? players
           : players
-          ? [players]
-          : [];
+            ? [players]
+            : [];
         cardsEl.innerHTML = "";
 
         // Render a compact card for each eliminated player
@@ -1137,6 +1151,7 @@
       };
 
       async function joinGame() {
+        normalizeGameCodeInput();
         const code = document.getElementById("gameCode").value.trim();
         const name = document.getElementById("playerName").value.trim();
 
@@ -1596,7 +1611,7 @@
         const questionsDiv = document.getElementById("interviewQuestions");
         const partnerNameSpan = document.getElementById("partnerName");
         const partnerAnswersHeading = document.getElementById(
-          "partnerAnswersHeading"
+          "partnerAnswersHeading",
         );
 
         if (!section || !questionsDiv) return;
@@ -1632,7 +1647,7 @@
         // fill partner name in header and answers heading
         const partnerName = formatName(
           state.interviewTarget.display_name || "",
-          state.interviewTarget.character_name || ""
+          state.interviewTarget.character_name || "",
         );
         if (partnerNameSpan) {
           partnerNameSpan.textContent = partnerName;
@@ -1835,7 +1850,7 @@
         }
 
         const inputs = document.querySelectorAll(
-          "#interviewQuestions input[data-question-id]"
+          "#interviewQuestions input[data-question-id]",
         );
         const answers = [];
         const questionMap = {};
@@ -1876,7 +1891,7 @@
                 interviewee_player_id: currentInterviewTarget.player_id,
                 answers,
               }),
-            }
+            },
           );
 
           if (!res.ok) {
@@ -1975,3 +1990,6 @@
     </script>
   </body>
 </html>
+
+const gameCodeInput = document.getElementById("gameCode"); if (gameCodeInput) {
+gameCodeInput.addEventListener("input", normalizeGameCodeInput); }

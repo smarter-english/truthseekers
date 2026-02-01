@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
     <meta charset="UTF-8" />
@@ -6,7 +6,11 @@
     <title>Truthseekers Teacher Dashboard</title>
     <style>
       body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
           sans-serif;
         margin: 20px;
         background: #f5f5f5;
@@ -137,7 +141,8 @@
       }
       #eliminationPopup.show {
         display: block;
-        animation: fadeSlideDown 0.25s ease-out,
+        animation:
+          fadeSlideDown 0.25s ease-out,
           fadeOut 0.4s ease-out 2.6s forwards;
       }
       #eliminationPopup .skull {
@@ -456,7 +461,7 @@
 
       async function apiFetch(
         path,
-        { method = "GET", body = null, json = true } = {}
+        { method = "GET", body = null, json = true } = {},
       ) {
         const opts = { method, headers: {} };
         if (body !== null) {
@@ -503,8 +508,8 @@
             const left = document.createElement("div");
             left.innerHTML = `
           <div><strong>Game ${game.id}</strong> – Code: <code>${
-              game.code
-            }</code></div>
+            game.code
+          }</code></div>
           <div class="game-meta">
             Status: ${game.status}
             &nbsp;•&nbsp; Round: ${game.current_round || "-"}
@@ -531,7 +536,7 @@
             deleteBtn.onclick = async () => {
               if (
                 !confirm(
-                  `Delete game ${game.id} (${game.code})? This cannot be undone.`
+                  `Delete game ${game.id} (${game.code})? This cannot be undone.`,
                 )
               )
                 return;
@@ -586,7 +591,7 @@
           !confirm(
             "Start game " +
               gameId +
-              "? This will assign roles and start round 1."
+              "? This will assign roles and start round 1.",
           )
         )
           return;
@@ -673,7 +678,7 @@
         if (!currentGameId) return;
         if (
           !confirm(
-            "Reset ALL devices for this game? This will kick everyone to the join screen and clear saved logins on their iPads within ~3 seconds."
+            "Reset ALL devices for this game? This will kick everyone to the join screen and clear saved logins on their iPads within ~3 seconds.",
           )
         )
           return;
@@ -683,7 +688,7 @@
             method: "POST",
           });
           alert(
-            `Reset signal sent (seq: ${out.force_logout_seq}). Players will reset on their next poll.`
+            `Reset signal sent (seq: ${out.force_logout_seq}). Players will reset on their next poll.`,
           );
           await refreshDebugAndGames();
         } catch (err) {
@@ -750,6 +755,32 @@
         } catch (err) {
           console.error(err);
           alert("Error removing player (see console).");
+        }
+      }
+
+      async function addStrike(playerId, playerLabel) {
+        if (!currentGameId) return;
+        const label = playerLabel || "player " + playerId;
+        if (!confirm(`Add a strike to ${label}?`)) return;
+
+        try {
+          const out = await apiFetch(
+            `/games/${currentGameId}/players/${playerId}/strike`,
+            {
+              method: "POST",
+            },
+          );
+
+          if (out.ghosted) {
+            alert(
+              `${label} has reached ${out.strikes}/3 strikes and is now a ghost.`,
+            );
+          }
+
+          await refreshDebugAndGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error adding strike: " + err.message);
         }
       }
 
@@ -996,7 +1027,7 @@
             playersById[p.id] = p;
             playerLabelById[p.id] = formatDebugName(
               p.display_name,
-              p.character_name
+              p.character_name,
             );
           });
         }
@@ -1030,7 +1061,7 @@
           playersDiv.innerHTML = "<p>No players.</p>";
         } else {
           let html =
-            "<table><thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Alive</th><th>Pod</th><th>Interview 1 saved</th><th>Interview 2 saved</th><th>Voted</th><th>Subround 1 Target</th><th>Subround 2 Target</th><th>Actions</th></tr></thead><tbody>";
+            "<table><thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Alive</th><th>Pod</th><th>Strikes</th><th>Interview 1 saved</th><th>Interview 2 saved</th><th>Voted</th><th>Subround 1 Target</th><th>Subround 2 Target</th><th>Actions</th></tr></thead><tbody>";
 
           // Build quick lookup for pods and assignments
           const podByPlayerId = {};
@@ -1097,6 +1128,9 @@
               p.id
             }, ${JSON.stringify(p.display_name || "")})'>Rename</button>`;
 
+            // Add + Strike button
+            actionHtml += ` <button class="secondary" onclick='addStrike(${p.id}, ${JSON.stringify(fullName)})'>+ Strike</button>`;
+
             // Remove is always available (admin cleanup)
             actionHtml += ` <button class="danger" onclick='removePlayer(${
               p.id
@@ -1123,12 +1157,16 @@
               ? '<span class="badge done">yes</span>'
               : '<span class="badge todo">no</span>';
 
+            const strikes = Number(p.strikes || 0);
+            const strikesCell = `<span class="badge">${strikes}/3</span>`;
+
             html += `<tr>
           <td>${p.id}</td>
           <td>${fullName}</td>
           <td>${roleBadge}</td>
           <td>${aliveBadge}</td>
           <td>${podLabel}</td>
+          <td>${strikesCell}</td>
           <td>${interview1Badge}</td>
           <td>${interview2Badge}</td>
           <td>${votedBadge}</td>

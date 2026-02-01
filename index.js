@@ -1247,6 +1247,7 @@ app.get('/me/current-state', async (req, res) => {
       display_name: player.display_name,
       is_alive: player.is_alive,
       role: player.role,
+      strikes: Number(player.strikes || 0),
       character_name: characterRow ? characterRow.name : null,
       character_avatar_file: characterRow ? characterRow.avatar_file : null,
     },
@@ -1694,6 +1695,92 @@ app.post('/games/:gameId/players/:playerId/remove', async (req, res) => {
     client.release();
   }
 });
+// teacher: add a language strike; auto-ghost on 3 strikes
+// Requires DB column:
+//   ALTER TABLE game_players ADD COLUMN IF NOT EXISTS strikes INTEGER DEFAULT 0;
+app.post('/games/:gameId/players/:playerId/strike', async (req, res) => {
+  const gameId = Number(req.params.gameId);
+  const playerId = Number(req.params.playerId);
+
+  if (!gameId || !playerId) {
+    return res.status(400).json({ error: 'Invalid gameId or playerId' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Ensure game exists
+    const gameRes = await client.query('SELECT id FROM games WHERE id = $1', [gameId]);
+    if (gameRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    // Lock player row to avoid race conditions if teacher taps fast
+    const pRes = await client.query(
+      `SELECT id, display_name, is_alive, COALESCE(strikes, 0) AS strikes
+       FROM game_players
+       WHERE id = $1 AND game_id = $2
+       FOR UPDATE`,
+      [playerId, gameId]
+    );
+    const player = pRes.rows[0];
+    if (!player) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Player not found in this game' });
+    }
+
+    const newStrikes = Number(player.strikes || 0) + 1;
+
+    // Persist strikes
+    await client.query(
+      'UPDATE game_players SET strikes = $1 WHERE id = $2 AND game_id = $3',
+      [newStrikes, playerId, gameId]
+    );
+
+    let ghosted = false;
+
+    // On 3rd strike, ghost if still alive
+    if (newStrikes >= 3 && player.is_alive) {
+      await client.query(
+        'UPDATE game_players SET is_alive = FALSE WHERE id = $1 AND game_id = $2',
+        [playerId, gameId]
+      );
+
+      // Record global elimination event on the game for client popups
+      await client.query(
+        `UPDATE games
+         SET last_eliminated_player_id = $1,
+             last_eliminated_seq = COALESCE(last_eliminated_seq, 0) + 1
+         WHERE id = $2`,
+        [playerId, gameId]
+      );
+
+      ghosted = true;
+    }
+
+    await client.query('COMMIT');
+
+    // Win/lose check after elimination
+    if (ghosted) {
+      await checkAndFinalizeGameIfNeeded(gameId);
+    }
+
+    res.json({
+      ok: true,
+      player_id: playerId,
+      strikes: newStrikes,
+      ghosted,
+    });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error(err);
+    res.status(500).json({ error: 'Failed to add strike', detail: err.message });
+  } finally {
+    client.release();
+  }
+});
 // teacher: mark a player as a ghost (eliminate)
 app.post('/games/:gameId/players/:playerId/ghost', async (req, res) => {
   const gameId = Number(req.params.gameId);
@@ -1770,6 +1857,7 @@ app.get('/games/:id/debug', async (req, res) => {
             gp.display_name,
             gp.role,
             gp.is_alive,
+            COALESCE(gp.strikes, 0) AS strikes,
             c.name AS character_name,
             c.avatar_file AS character_avatar_file
     FROM game_players gp

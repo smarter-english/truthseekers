@@ -375,6 +375,38 @@
         font-size: 12px;
         color: #666;
       }
+      /* Strike toast */
+      #strikeToast {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.88);
+        color: #fff;
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 700;
+        display: none;
+        z-index: 10002;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+        max-width: min(520px, 92vw);
+        text-align: center;
+      }
+      #strikeToast.show {
+        display: block;
+        animation: toastIn 0.2s ease-out;
+      }
+      @keyframes toastIn {
+        from {
+          opacity: 0;
+          transform: translateX(-50%) translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+        }
+      }
     </style>
   </head>
   <body>
@@ -440,6 +472,8 @@
           </div>
           <div id="playerEliminationCards" style="margin-top: 10px"></div>
         </div>
+
+        <div id="strikeToast" aria-live="polite"></div>
 
         <div
           id="gameOverModal"
@@ -563,6 +597,9 @@
       let lastMyAnswersRenderKey = null;
       let lastFeedbackRenderKey = null;
       let lastVoteRenderKey = null;
+      let lastSeenStrikes = null;
+      let strikeToastTimeoutId = null;
+
       function computeMyAnswersKey(state) {
         try {
           const sheet = (state && state.answerSheet) || [];
@@ -793,6 +830,45 @@
         if (!el) return;
         el.classList.remove("hidden");
         el.textContent += (el.textContent ? "\n" : "") + String(msg);
+      }
+      function hideStrikeToast() {
+        const t = document.getElementById("strikeToast");
+        if (!t) return;
+        t.classList.remove("show");
+        t.textContent = "";
+      }
+
+      function showStrikeToast(strikes) {
+        const t = document.getElementById("strikeToast");
+        if (!t) return;
+
+        const n = Number(strikes || 0);
+        if (n >= 3) {
+          t.textContent = `⚠️ Strike ${n}/3 — You are now a ghost.`;
+        } else {
+          t.textContent = `⚠️ Strike ${n}/3 — Speak English only.`;
+        }
+
+        t.classList.add("show");
+        if (strikeToastTimeoutId) clearTimeout(strikeToastTimeoutId);
+        strikeToastTimeoutId = setTimeout(hideStrikeToast, 2500);
+      }
+
+      function maybeShowStrikeToast(state) {
+        if (!state || !state.player) return;
+
+        const strikes = Number(state.player.strikes || 0);
+
+        // first time we see state, just initialize
+        if (lastSeenStrikes === null) {
+          lastSeenStrikes = strikes;
+          return;
+        }
+
+        if (strikes > lastSeenStrikes) {
+          lastSeenStrikes = strikes;
+          showStrikeToast(strikes);
+        }
       }
 
       function updateCharacterUI(state) {
@@ -1078,6 +1154,8 @@
           lastSavedInterviewName = "";
           lastSeenEliminationSeq = 0;
           lastPodRenderKey = null;
+          lastSeenStrikes = null;
+          hideStrikeToast();
 
           // Reset UI
           document.getElementById("playerView")?.classList.add("hidden");
@@ -1230,6 +1308,8 @@
         lastSeenEliminationSeq = 0;
         lastSeenForceLogoutSeq = 0;
         lastPodRenderKey = null;
+        lastSeenStrikes = null;
+        hideStrikeToast();
 
         document.getElementById("playerView").classList.add("hidden");
         document.getElementById("joinForm").classList.remove("hidden");
@@ -1269,6 +1349,7 @@
         updateCharacterUI(state);
         updateWaitingUI(state);
         updateFinishedUI(state);
+        maybeShowStrikeToast(state);
 
         // If the game hasn't started yet, don't render or switch gameplay tabs.
         // (Otherwise phase 'rally' will force the rally section visible.)
@@ -1406,6 +1487,7 @@
 
         document.getElementById("displayNameHeader").textContent =
           state.player.display_name;
+        lastSeenStrikes = Number(state.player.strikes || 0);
         updateCharacterUI(state);
         maybeShowGameOverModal(state);
         document.getElementById("viewGameCode").textContent = state.game.code;

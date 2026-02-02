@@ -1,0 +1,131 @@
+character_id,question_id,answer_value
+1,13,1 minute 35 seconds
+2,13,45 seconds
+3,13,2 minutes 10 seconds
+4,13,30 seconds
+5,13,1 minute 20 seconds
+6,13,55 seconds
+7,13,2 minutes
+8,13,25 seconds
+9,13,1 minute 50 seconds
+10,13,40 seconds
+11,13,2 minutes 25 seconds
+12,13,1 minute
+13,13,35 seconds
+14,13,1 minute 45 seconds
+15,13,20 seconds
+16,13,1 minute 10 seconds
+17,13,50 seconds
+18,13,2 minutes 15 seconds
+19,13,1 minute 30 seconds
+20,13,2 minutes 5 seconds
+21,13,1 minute 55 seconds
+22,13,30 seconds
+23,13,1 minute 25 seconds
+24,13,2 minutes 20 seconds
+25,13,1 minute 15 seconds
+26,13,1 minute 40 seconds
+1,14,300 m
+2,14,25 m
+3,14,2 km
+4,14,75 m
+5,14,1 km
+6,14,0 m
+7,14,4 km
+8,14,150 m
+9,14,750 m
+10,14,50 m
+11,14,5 km
+12,14,250 m
+13,14,10 m
+14,14,3 km
+15,14,100 m
+16,14,900 m
+17,14,2.5 km
+18,14,400 m
+19,14,1.5 km
+20,14,200 m
+21,14,4.5 km
+22,14,500 m
+23,14,600 m
+24,14,1.2 km
+25,14,3.5 km
+26,14,800 m
+1,15,ride a unicycle
+2,15,juggle
+3,15,throw knives
+4,15,walk a tight rope
+5,15,breathe fire
+6,15,do a back flip
+7,15,balance on a ball
+8,15,spin plates
+9,15,juggle and ride a unicycle
+10,15,do a back flip and juggle
+11,15,spin plates and walk a tight rope
+12,15,breathe fire and juggle
+13,15,ride a unicycle and throw knives
+14,15,walk a tight rope and balance on a ball
+15,15,do a back flip and spin plates
+16,15,throw knives and breathe fire
+17,15,juggle and spin plates
+18,15,ride a unicycle and do a back flip
+19,15,walk a tight rope and throw knives
+20,15,balance on a ball and juggle
+21,15,breathe fire and spin plates
+22,15,do a back flip and walk a tight rope
+23,15,throw knives and spin plates
+24,15,ride a unicycle and balance on a ball
+25,15,breathe fire and do a back flip
+26,15,walk a tight rope and juggle
+1,16,piano
+2,16,guitar
+3,16,violin
+4,16,drums
+5,16,flute
+6,16,saxophone
+7,16,bass guitar
+8,16,trumpet
+9,16,piano and guitar
+10,16,violin and piano
+11,16,guitar and drums
+12,16,flute and piano
+13,16,saxophone and guitar
+14,16,violin and flute
+15,16,drums and piano
+16,16,guitar and violin
+17,16,flute and saxophone
+18,16,drums and guitar
+19,16,piano and saxophone
+20,16,violin and drums
+21,16,guitar and flute
+22,16,drums and saxophone
+23,16,bass guitar and guitar
+24,16,trumpet and piano
+25,16,violin and trumpet
+26,16,bass guitar and drums
+1,17,football
+2,17,basketball
+3,17,tennis
+4,17,swimming
+5,17,running
+6,17,cycling
+7,17,volleyball
+8,17,badminton
+9,17,table tennis
+10,17,gymnastics
+11,17,football and basketball
+12,17,tennis and swimming
+13,17,running and cycling
+14,17,volleyball and badminton
+15,17,football and running
+16,17,basketball and gymnastics
+17,17,swimming and cycling
+18,17,tennis and table tennis
+19,17,football and tennis
+20,17,badminton and table tennis
+21,17,volleyball and basketball
+22,17,running and swimming
+23,17,gymnastics and cycling
+24,17,football and volleyball
+25,17,basketball and tennis
+26,17,swimming and gymnastics

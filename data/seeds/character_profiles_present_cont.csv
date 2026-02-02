@@ -1,0 +1,79 @@
+character_id,question_id,answer_value
+1,23,a novel
+2,23,a comic
+3,23,nothing
+4,23,a manga
+5,23,Harry Potter
+6,23,The Hunger Games
+7,23,a biography
+8,23,Percy Jackson
+9,23,a crime story
+10,23,a textbook
+11,23,The Lord of the Rings
+12,23,Game of Thrones
+13,23,1984
+14,23,Animal Farm
+15,23,The Hobbit
+16,23,Crime and Punishment
+17,23,War and Peace
+18,23,The Brothers Karamazov
+19,23,To Kill a Mockingbird
+20,23,Pride and Prejudice
+21,23,a script
+22,23,a poetry book
+23,23,The Great Gatsby
+24,23,The Catcher in the Rye
+25,23,Brave New World
+26,23,The Chronicles of Narnia
+1,24,working
+2,24,giving a speech
+3,24,meeting people
+4,24,travelling
+5,24,talking to advisers
+6,24,eating
+7,24,sleeping
+8,24,reading reports
+9,24,watching the news
+10,24,planning something
+11,24,arguing with a colleague
+12,24,deciding something important
+13,24,giving an interview
+14,24,talking on the phone
+15,24,resting
+16,24,in a meeting
+17,24,flying
+18,24,at an event
+19,24,writing
+20,24,listening to music
+21,24,drinking a coffee
+22,24,waiting for a bus
+23,24,thinking
+24,24,eating a pizza
+25,24,relaxing
+26,24,I have no idea
+1,25,ancient Rome
+2,25,World War II
+3,25,the Middle Ages
+4,25,the first world war
+5,25,Alexander the Great
+6,25,modern history
+7,25,the French revolution
+8,25,kings and queens
+9,25,empires
+10,25,wars
+11,25,colonisation
+12,25,slavery
+13,25,democracy
+14,25,dictators
+15,25,European history
+16,25,the unification of Italy
+17,25,American history
+18,25,the twentieth century
+19,25,the nineteenth century
+20,25,industrialisation
+21,25,nationalism
+22,25,independence movements
+23,25,migration
+24,25,I dont study history
+25,25,nothing interesting
+26,25,I’m not sure

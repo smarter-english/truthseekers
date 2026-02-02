@@ -1,0 +1,131 @@
+character_id,question_id,answer_value
+1,18,stayed at home
+2,18,went out with friends
+3,18,visited my family
+4,18,studied
+5,18,played video games
+6,18,watched films
+7,18,went shopping
+8,18,slept a lot
+9,18,went to a party
+10,18,did homework
+11,18,played tennis
+12,18,went to the cinema
+13,18,cleaned my room
+14,18,made a cake
+15,18,fell off my bike
+16,18,cut down a tree
+17,18,painted a picture
+18,18,bought a new watch
+19,18,read a book
+20,18,met friends
+21,18,learned to code
+22,18,went for a walk
+23,18,went to a football match
+24,18,stole someone’s bike
+25,18,made an app
+26,18,telephoned my friend in America
+1,19,11:20 pm
+2,19,9:40 pm
+3,19,12:30 am
+4,19,10:10 pm
+5,19,1:00 am
+6,19,9:00 pm
+7,19,12:10 am
+8,19,10:40 pm
+9,19,11:50 pm
+10,19,9:20 pm
+11,19,1:10 am
+12,19,10:00 pm
+13,19,12:00 am
+14,19,11:10 pm
+15,19,9:50 pm
+16,19,12:40 am
+17,19,10:30 pm
+18,19,11:40 pm
+19,19,9:10 pm
+20,19,12:20 am
+21,19,10:50 pm
+22,19,11:00 pm
+23,19,9:30 pm
+24,19,12:50 am
+25,19,10:20 pm
+26,19,11:30 pm
+1,20,I rode my unicycle
+2,20,I rowed my boat
+3,20,I rode my motorbike
+4,20,I ran
+5,20,I came by car
+6,20,I came by bicycle
+7,20,I came by car
+8,20,I came by bus
+9,20,I roller-skated
+10,20,I came by horse
+11,20,I came by train
+12,20,I came by train
+13,20,I came by horse
+14,20,I walked
+15,20,I ice-skated
+16,20,I swam
+17,20,I came by bus
+18,20,I came by helicopter
+19,20,I came by underground train
+20,20,I came by taxi
+21,20,I came by taxi
+22,20,I walked
+23,20,I came by underground train
+24,20,I came by helicopter
+25,20,I came by bicycle
+26,20,I ran
+1,21,toast
+2,21,cereal with milk
+3,21,yoghurt and banana
+4,21,eggs and toast
+5,21,juice and toast
+6,21,coffee and a croissant
+7,21,cereal
+8,21,milk
+9,21,yoghurt
+10,21,banana
+11,21,eggs
+12,21,juice
+13,21,coffee
+14,21,croissant
+15,21,toast and coffee
+16,21,cereal and juice
+17,21,yoghurt and coffee
+18,21,banana and milk
+19,21,eggs and juice
+20,21,croissant and juice
+21,21,toast and banana
+22,21,cereal and coffee
+23,21,yoghurt with cereal
+24,21,eggs and a croissant
+25,21,banana and juice
+26,21,toast with milk
+1,22,my mum gave it to me
+2,22,my dad gave it to me
+3,22,I got it as a gift
+4,22,I got it for my birthday
+5,22,I got it for Christmas
+6,22,I bought it
+7,22,I bought it second-hand
+8,22,I ordered it online
+9,22,I bought it in a shop
+10,22,my brother gave it to me
+11,22,my sister gave it to me
+12,22,a friend gave it to me
+13,22,I won it
+14,22,It's a secret.
+15,22,I saved for it and bought it
+16,22,I stole it
+17,22,I found it in my teacher's bag
+18,22,I found it on the street
+19,22,I got it after exams
+20,22,I got it for school
+21,22,I won it in a competition
+22,22,I got it from work
+23,22,I got it for free
+24,22,I can't tell you
+25,22,I don’t know where I got it
+26,22,I borrowed it

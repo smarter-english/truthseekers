@@ -20,10 +20,11 @@
       }
 
       #killCodeWatermark .code {
-        font-size: 96px; /* bigger, harder to hide */
-        font-weight: 900;
-        letter-spacing: 10px;
-        color: rgba(160, 0, 0, 0.12); /* muted red, still subtle */
+        font-family: "Fira Mono", monospace;
+        font-size: 96px;
+        font-weight: 700; /* mono fonts don’t need extreme weight */
+        letter-spacing: 12px; /* clearer separation of characters */
+        color: rgba(160, 0, 0, 0.14);
         transform: rotate(-20deg);
         user-select: none;
         white-space: nowrap;
@@ -32,7 +33,7 @@
       @media (max-width: 480px) {
         #killCodeWatermark .code {
           font-size: 72px;
-          letter-spacing: 8px;
+          letter-spacing: 10px;
         }
       }
       body {

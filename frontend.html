@@ -8,6 +8,33 @@
     />
     <title>Truthseekers Game</title>
     <style>
+      /* Kill code watermark */
+      #killCodeWatermark {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none; /* cannot be interacted with */
+        z-index: 500; /* below modals, above content */
+      }
+
+      #killCodeWatermark .code {
+        font-size: 72px;
+        font-weight: 900;
+        letter-spacing: 8px;
+        color: rgba(0, 0, 0, 0.06);
+        transform: rotate(-20deg);
+        user-select: none;
+        white-space: nowrap;
+      }
+
+      @media (max-width: 480px) {
+        #killCodeWatermark .code {
+          font-size: 56px;
+          letter-spacing: 6px;
+        }
+      }
       body {
         font-family: sans-serif;
         margin: 0;
@@ -438,6 +465,9 @@
 
       <!-- Player View -->
       <div id="playerView" class="hidden">
+        <div id="killCodeWatermark">
+          <div class="code" id="killCodeText"></div>
+        </div>
         <div id="headerBar">
           <div class="header-left">
             <div class="header-title">Truthseekers by Smarter English</div>
@@ -577,6 +607,25 @@
     </div>
 
     <script>
+      function updateKillCodeWatermark(state) {
+        const wm = document.getElementById("killCodeWatermark");
+        const txt = document.getElementById("killCodeText");
+        if (!wm || !txt || !state || !state.player) return;
+
+        const code = state.player.kill_code;
+        if (!code) {
+          wm.style.display = "none";
+          return;
+        }
+
+        txt.textContent = `@${code}`;
+        wm.style.display = "flex";
+      }
+
+      function hideKillCodeWatermark() {
+        const wm = document.getElementById("killCodeWatermark");
+        if (wm) wm.style.display = "none";
+      }
       const API = window.location.origin;
       let joinToken = null;
       let currentGameCode = null;
@@ -1162,6 +1211,7 @@
           lastPodRenderKey = null;
           lastSeenStrikes = null;
           hideStrikeToast();
+          hideKillCodeWatermark();
 
           // Reset UI
           document.getElementById("playerView")?.classList.add("hidden");
@@ -1316,6 +1366,7 @@
         lastPodRenderKey = null;
         lastSeenStrikes = null;
         hideStrikeToast();
+        hideKillCodeWatermark();
 
         document.getElementById("playerView").classList.add("hidden");
         document.getElementById("joinForm").classList.remove("hidden");
@@ -1356,6 +1407,7 @@
         updateWaitingUI(state);
         updateFinishedUI(state);
         maybeShowStrikeToast(state);
+        updateKillCodeWatermark(state);
 
         // If the game hasn't started yet, don't render or switch gameplay tabs.
         // (Otherwise phase 'rally' will force the rally section visible.)
@@ -1493,6 +1545,7 @@
 
         document.getElementById("displayNameHeader").textContent =
           state.player.display_name;
+        updateKillCodeWatermark(state);
         lastSeenStrikes = Number(state.player.strikes || 0);
         updateCharacterUI(state);
         maybeShowGameOverModal(state);

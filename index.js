@@ -84,6 +84,11 @@ function generateLetterCode(length = 6) {
   return out;
 }
 
+function generateKillCode() {
+  // 4 letters A–Z
+  return generateLetterCode(4);
+}
+
 async function createPodsAndAssignmentsForRound(gameId, roundId) {
   // get all players (alive + ghosts)
   const playersRes = await pool.query(
@@ -981,6 +986,46 @@ app.post('/games/:id/start', async (req, res) => {
     );
   }
 
+  // Assign a private kill code to each player (letters only). Used later by baddies.
+  // Ensure uniqueness within the game.
+  const codeSet = new Set();
+  const existingCodesRes = await pool.query(
+    'SELECT kill_code FROM game_players WHERE game_id = $1 AND kill_code IS NOT NULL',
+    [gameId]
+  );
+  existingCodesRes.rows.forEach(r => { if (r.kill_code) codeSet.add(String(r.kill_code).toUpperCase()); });
+
+  const playersWithCodesRes = await pool.query(
+    'SELECT id, kill_code FROM game_players WHERE game_id = $1 ORDER BY id',
+    [gameId]
+  );
+
+  for (const p of playersWithCodesRes.rows) {
+    if (p.kill_code) continue;
+    let kc = null;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const candidate = generateKillCode();
+      if (!codeSet.has(candidate)) {
+        kc = candidate;
+        codeSet.add(candidate);
+        break;
+      }
+    }
+    if (!kc) {
+      throw new Error('Failed to create unique kill code');
+    }
+    await pool.query(
+      'UPDATE game_players SET kill_code = $1 WHERE id = $2 AND game_id = $3',
+      [kc, p.id, gameId]
+    );
+  }
+
+  // Reset per-round kill usage tracking at game start
+  await pool.query(
+    'UPDATE game_players SET kill_used_round_id = NULL WHERE game_id = $1',
+    [gameId]
+  );
+
   // set up questions, player profiles, and first round with baddie mutations
   await assignCharactersAndProfiles(gameId);
   await createFirstRoundWithMutations(gameId);
@@ -1285,6 +1330,7 @@ app.get('/me/current-state', async (req, res) => {
       is_alive: player.is_alive,
       role: player.role,
       strikes: Number(player.strikes || 0),
+      kill_code: player.kill_code || null,
       character_name: characterRow ? characterRow.name : null,
       character_avatar_file: characterRow ? characterRow.avatar_file : null,
     },
@@ -1365,6 +1411,19 @@ app.post('/rounds/:roundId/interviews', async (req, res) => {
     return res.status(400).json({ error: 'You are not assigned to interview this player in the current subround' });
   }
 
+  // --- Kill code detection (baddies only) ---
+  // Baddies can type a token like @ABCD in any reported_value to ghost the matching living GOODIE.
+  const KILL_RE = /@([A-Z]{4})/;
+  let killToken = null;
+  for (const ans of answers) {
+    const v = (ans && ans.reported_value ? String(ans.reported_value) : '').toUpperCase();
+    const m = v.match(KILL_RE);
+    if (m && m[1]) {
+      killToken = m[1];
+      break;
+    }
+  }
+
   // create or reuse interview row
   const interviewRes = await pool.query(
     `INSERT INTO interviews (round_id, interviewer_player_id, interviewee_player_id)
@@ -1391,7 +1450,81 @@ app.post('/rounds/:roundId/interviews', async (req, res) => {
     );
   }
 
-  res.json({ ok: true, interview_id: interview.id });
+  // Execute kill if a token was provided and the interviewer is a living baddie
+  let killResult = null;
+  if (killToken && player.role === 'baddie' && player.is_alive) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Lock baddie row and check one-kill-per-round
+      const bRes = await client.query(
+        `SELECT id, kill_used_round_id
+         FROM game_players
+         WHERE id = $1 AND game_id = $2
+         FOR UPDATE`,
+        [player.id, player.game_id]
+      );
+      const b = bRes.rows[0];
+      if (b) {
+        const used = b.kill_used_round_id;
+        if (used && Number(used) === Number(roundId)) {
+          // already used this round; ignore
+        } else {
+          // Find the target by kill_code (only living goodies)
+          const tRes = await client.query(
+            `SELECT id, role, is_alive
+             FROM game_players
+             WHERE game_id = $1
+               AND is_alive = TRUE
+               AND role = 'goodie'
+               AND kill_code = $2
+             LIMIT 1`,
+            [player.game_id, killToken]
+          );
+          const target = tRes.rows[0];
+          if (target && target.id !== player.id) {
+            // Ghost the target
+            await client.query(
+              'UPDATE game_players SET is_alive = FALSE WHERE id = $1 AND game_id = $2',
+              [target.id, player.game_id]
+            );
+
+            // Mark kill used for this baddie in this round
+            await client.query(
+              'UPDATE game_players SET kill_used_round_id = $1 WHERE id = $2 AND game_id = $3',
+              [roundId, player.id, player.game_id]
+            );
+
+            // Record global elimination event on the game
+            await client.query(
+              `UPDATE games
+               SET last_eliminated_player_id = $1,
+                   last_eliminated_seq = COALESCE(last_eliminated_seq, 0) + 1
+               WHERE id = $2`,
+              [target.id, player.game_id]
+            );
+
+            killResult = { ok: true, target_player_id: target.id };
+          }
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      console.error(err);
+    } finally {
+      client.release();
+    }
+
+    // Win/lose check after any elimination
+    if (killResult && killResult.ok) {
+      await checkAndFinalizeGameIfNeeded(player.game_id);
+    }
+  }
+
+  res.json({ ok: true, interview_id: interview.id, kill: killResult });
 });
 
 // player: submit a vote for this round

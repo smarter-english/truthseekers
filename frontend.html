@@ -100,6 +100,12 @@
         color: #555;
       }
 
+      .ally-hint {
+        margin-left: 6px;
+        font-size: 12px;
+        opacity: 0.45;
+      }
+
       #podMembers {
         white-space: pre-line; /* to preserve line breaks */
       }
@@ -1738,11 +1744,24 @@
           state.interviewTarget.display_name || "",
           state.interviewTarget.character_name || "",
         );
+
         if (partnerNameSpan) {
           partnerNameSpan.textContent = partnerName;
+
+          // Low‑key ally hint: only baddies receive is_baddie from backend
+          if (state.interviewTarget.is_baddie === true) {
+            const hint = document.createElement("span");
+            hint.className = "ally-hint";
+            hint.textContent = "•";
+            partnerNameSpan.appendChild(hint);
+          }
         }
         if (partnerAnswersHeading) {
           partnerAnswersHeading.textContent = `${partnerName}'s answers`;
+
+          if (state.interviewTarget.is_baddie === true) {
+            partnerAnswersHeading.textContent += " •";
+          }
         }
 
         // Update persistent interview status line

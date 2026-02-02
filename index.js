@@ -87,7 +87,7 @@ function generateLetterCode(length = 6) {
 async function createPodsAndAssignmentsForRound(gameId, roundId) {
   // get all players (alive + ghosts)
   const playersRes = await pool.query(
-    'SELECT id, display_name, is_alive FROM game_players WHERE game_id = $1 ORDER BY id',
+    'SELECT id, display_name, is_alive, role FROM game_players WHERE game_id = $1 ORDER BY id',
     [gameId]
   );
   const allPlayers = playersRes.rows;
@@ -116,8 +116,27 @@ async function createPodsAndAssignmentsForRound(gameId, roundId) {
 
   // shuffle players once
   const shuffled = shuffleArray(allPlayers);
-  const livePlayers = shuffled.filter(p => p.is_alive);
   const ghostPlayers = shuffled.filter(p => !p.is_alive);
+
+  // Build lookup by id for quick checks
+  const byId = {};
+  shuffled.forEach(p => { byId[p.id] = p; });
+
+  // Split alive players by role (we only pair alive baddies)
+  const liveBaddies = shuffled.filter(p => p.is_alive && p.role === 'baddie');
+  const liveGoodies = shuffled.filter(p => p.is_alive && p.role !== 'baddie');
+
+  // Helper: count live players currently in a pod
+  function liveCount(podInfo) {
+    return podInfo.memberIds.filter(id => byId[id] && byId[id].is_alive).length;
+  }
+
+  // Helper: pop next remaining live player (prefer goodies to avoid over-stacking baddies)
+  function nextRemainingLive() {
+    if (liveGoodies.length) return liveGoodies.shift();
+    if (liveBaddies.length) return liveBaddies.shift();
+    return null;
+  }
 
   // decide desired pod sizes
   let podSizes;
@@ -140,23 +159,33 @@ async function createPodsAndAssignmentsForRound(gameId, roundId) {
     podsInfo.push({ memberIds: [] });
   }
 
-  // 2) Distribute 2 live players per pod where possible
-  let liveIndex = 0;
+  // 2) Seed baddie pairs into pods to guarantee (where possible) a baddie↔baddie interview in subround 1.
+  // For pod sizes 4/6/7, indices (0,1) interview each other in subround 1.
+  // We place a pair into the first pods so they land at indices 0 and 1.
+  const pairCount = Math.min(Math.floor(liveBaddies.length / 2), podCount);
+  for (let i = 0; i < pairCount; i++) {
+    const b1 = liveBaddies.shift();
+    const b2 = liveBaddies.shift();
+    if (b1) podsInfo[i].memberIds.push(b1.id);
+    if (b2) podsInfo[i].memberIds.push(b2.id);
+  }
+
+  // 3) Ensure at least 2 live players per pod (where possible), filling with remaining live players.
   if (totalLive >= 2) {
     for (let i = 0; i < podCount; i++) {
-      if (liveIndex < livePlayers.length) {
-        podsInfo[i].memberIds.push(livePlayers[liveIndex++].id);
-      }
-      if (liveIndex < livePlayers.length) {
-        podsInfo[i].memberIds.push(livePlayers[liveIndex++].id);
+      while (liveCount(podsInfo[i]) < 2) {
+        const nxt = nextRemainingLive();
+        if (!nxt) break;
+        podsInfo[i].memberIds.push(nxt.id);
       }
     }
   }
 
-  // 3) Fill remaining slots with leftover live players and ghosts,
+  // 4) Fill remaining slots with leftover live players and ghosts,
   // shuffled and spread evenly across pods
+  const remainingLive = shuffleArray([ ...liveGoodies, ...liveBaddies ]);
   const remaining = shuffleArray([
-    ...livePlayers.slice(liveIndex),
+    ...remainingLive,
     ...ghostPlayers,
   ]);
 
@@ -928,9 +957,10 @@ app.post('/games/:id/start', async (req, res) => {
   // decide number of baddies (simple rule for now)
   let numBaddies;
   if (numPlayers <= 8) numBaddies = 2;
-  else if (numPlayers <= 12) numBaddies = 3;
-  else if (numPlayers <= 16) numBaddies = 4;
-  else numBaddies = 5;
+  else if (numPlayers <= 10) numBaddies = 3;
+  else if (numPlayers <= 13) numBaddies = 4;
+  else if (numPlayers <= 16) numBaddies = 5;
+  else numBaddies = 6;
 
   // shuffle players array
   const shuffled = [...players].sort(() => Math.random() - 0.5);
@@ -1107,6 +1137,7 @@ app.get('/me/current-state', async (req, res) => {
           `SELECT ia.interviewee_player_id,
                   gp.display_name,
                   gp.is_alive,
+                  gp.role AS interviewee_role,
                   c.name AS character_name,
                   c.avatar_file AS character_avatar_file
           FROM interview_assignments ia
@@ -1127,6 +1158,12 @@ app.get('/me/current-state', async (req, res) => {
             character_name: assignRes.rows[0].character_name,
             character_avatar_file: assignRes.rows[0].character_avatar_file,
           };
+
+          // If requester is a baddie, reveal whether the current interviewee is also a baddie.
+          // Goodies never receive this flag.
+          if (player.role === 'baddie') {
+            interviewTarget.is_baddie = assignRes.rows[0].interviewee_role === 'baddie';
+          }
         }
       }
 

@@ -8,23 +8,23 @@
     />
     <title>Truthseekers Game</title>
     <style>
-      /* Kill code watermark */
+      /* Kill code watermark - tiled diagonal watermark */
       #killCodeWatermark {
         position: fixed;
         inset: 0;
         display: none;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none; /* cannot be interacted with */
-        z-index: 500; /* below modals, above content */
+        pointer-events: none;
+        z-index: 500;
+        background-repeat: repeat;
+        background-size: 320px 220px; /* spacing between repeats */
       }
 
       #killCodeWatermark .code {
         font-family: "Fira Mono", monospace;
-        font-size: 96px;
-        font-weight: 700; /* mono fonts don’t need extreme weight */
-        letter-spacing: 12px; /* clearer separation of characters */
-        color: rgba(160, 0, 0, 0.14);
+        font-size: 64px;
+        font-weight: 700;
+        letter-spacing: 10px;
+        color: rgba(160, 0, 0, 0.12);
         transform: rotate(-20deg);
         user-select: none;
         white-space: nowrap;
@@ -466,9 +466,7 @@
 
       <!-- Player View -->
       <div id="playerView" class="hidden">
-        <div id="killCodeWatermark">
-          <div class="code" id="killCodeText"></div>
-        </div>
+        <div id="killCodeWatermark"></div>
         <div id="headerBar">
           <div class="header-left">
             <div class="header-title">Truthseekers by Smarter English</div>
@@ -610,17 +608,36 @@
     <script>
       function updateKillCodeWatermark(state) {
         const wm = document.getElementById("killCodeWatermark");
-        const txt = document.getElementById("killCodeText");
-        if (!wm || !txt || !state || !state.player) return;
+        if (!wm || !state || !state.player) return;
 
         const code = state.player.kill_code;
         if (!code) {
           wm.style.display = "none";
+          wm.style.backgroundImage = "";
           return;
         }
 
-        txt.textContent = `@${code}`;
-        wm.style.display = "flex";
+        const text = `@${code}`;
+
+        // Use an SVG background so text can be repeated diagonally
+        const svg = `
+          <svg xmlns='http://www.w3.org/2000/svg' width='320' height='220'>
+            <text x='20' y='120'
+              font-family='Fira Mono, monospace'
+              font-size='64'
+              font-weight='700'
+              fill='rgba(160,0,0,0.12)'
+              transform='rotate(-20 20 120)'>
+              ${text}
+            </text>
+          </svg>`;
+
+        const encoded = encodeURIComponent(svg)
+          .replace(/'/g, "%27")
+          .replace(/"/g, "%22");
+
+        wm.style.backgroundImage = `url("data:image/svg+xml,${encoded}")`;
+        wm.style.display = "block";
       }
 
       function hideKillCodeWatermark() {

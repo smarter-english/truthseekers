@@ -20,10 +20,10 @@
       }
 
       #killCodeWatermark .code {
-        font-size: 72px;
+        font-size: 96px; /* bigger, harder to hide */
         font-weight: 900;
-        letter-spacing: 8px;
-        color: rgba(0, 0, 0, 0.06);
+        letter-spacing: 10px;
+        color: rgba(160, 0, 0, 0.12); /* muted red, still subtle */
         transform: rotate(-20deg);
         user-select: none;
         white-space: nowrap;
@@ -31,8 +31,8 @@
 
       @media (max-width: 480px) {
         #killCodeWatermark .code {
-          font-size: 56px;
-          letter-spacing: 6px;
+          font-size: 72px;
+          letter-spacing: 8px;
         }
       }
       body {

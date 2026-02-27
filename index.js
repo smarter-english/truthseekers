@@ -511,9 +511,9 @@ async function createFirstRoundWithMutations(gameId) {
     [round.round_number, gameId]
   );
 
-  // pick 3 random questions for this round (IDs 1–12 only)
+  // pick 3 random questions for this round (IDs 13–25 only)
   const qRes = await pool.query(
-    'SELECT id FROM questions WHERE id BETWEEN 1 AND 12 ORDER BY random() LIMIT 3'
+    'SELECT id FROM questions WHERE id BETWEEN 13 AND 25 ORDER BY random() LIMIT 3'
   );
   const selectedQuestions = qRes.rows; // [{id: ...}, ...]
 
@@ -596,9 +596,9 @@ async function createNextRoundWithMutations(gameId) {
     [round.round_number, gameId]
   );
 
-  // pick 3 random questions for this round (IDs 1–12 only)
+  // pick 3 random questions for this round (IDs 13–25 only)
   const qRes = await pool.query(
-    'SELECT id FROM questions WHERE id BETWEEN 1 AND 12 ORDER BY random() LIMIT 3'
+    'SELECT id FROM questions WHERE id BETWEEN 13 AND 25 ORDER BY random() LIMIT 3'
   );
   const selectedQuestions = qRes.rows;
 

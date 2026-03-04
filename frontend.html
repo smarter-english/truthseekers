@@ -606,6 +606,139 @@
     </div>
 
     <script>
+      // ── Paragraph template ──────────────────────────────────────────────────
+      // Each part is either { text } (literal) or { qid, label } (a field).
+      // qid: null = character name (always filled); qid: N = question id.
+      const PARA_PARTS = [
+        { text: "My name is " },
+        { qid: null, label: "NAME" },
+        { text: " and I'm " },
+        { qid: 1, label: "AGE" },
+        { text: " years old. I'm from " },
+        { qid: 2, label: "HOMETOWN" },
+        { text: ". I work as " },
+        { qid: 10, label: "JOB" },
+        { text: " and I travel to work " },
+        { qid: 8, label: "TRAVEL" },
+        { text: ". At the weekend I usually " },
+        { qid: 3, label: "WEEKEND" },
+        { text: ". In the morning I get up at " },
+        { qid: 6, label: "WAKE TIME" },
+        { text: " and I have " },
+        { qid: 5, label: "BREAKFAST" },
+        { text: " for breakfast. My favourite food is " },
+        { qid: 7, label: "FAVOURITE FOOD" },
+        { text: " and my favourite colour is " },
+        { qid: 9, label: "FAVOURITE COLOUR" },
+        { text: ". I usually sleep " },
+        { qid: 11, label: "SLEEP" },
+        { text: " a night. I go to the hairdresser " },
+        { qid: 4, label: "HAIRDRESSER" },
+        { text: ". " },
+        { qid: 12, label: "PETS" },
+        { text: "." },
+      ];
+
+      // Transform raw DB answers into paragraph-friendly form.
+      function getAnswerForParagraph(qid, raw) {
+        if (!raw) return "";
+        switch (qid) {
+          case 3: // weekend — strip leading "I "
+            return raw.replace(/^I /, "");
+          case 8: { // travel — convert to travel-mode phrase
+            const MAP = {
+              "I ride my unicycle": "by unicycle",
+              "I row my boat": "by boat",
+              "I ride my motorbike": "by motorbike",
+              "I run": "on foot",
+              "I rollerskate": "on rollerskates",
+              "I walk": "on foot",
+              "I ice-skate": "on ice-skates",
+              "I swim": "by swimming",
+              "By car": "by car",
+              "By bicycle": "by bicycle",
+              "By bus": "by bus",
+              "By train": "by train",
+              "By horse": "by horse",
+              "By helicopter": "by helicopter",
+              "By underground train": "by underground train",
+              "By taxi": "by taxi",
+            };
+            return MAP[raw] ?? raw.charAt(0).toLowerCase() + raw.slice(1);
+          }
+          case 10: // job — strip "I am "
+            return raw.replace(/^I am /, "");
+          case 12: { // pets — rewrite as full sentence
+            const MAP = {
+              "Yes a cat": "I have a cat",
+              "Yes a hamster": "I have a hamster",
+              "Yes a dog": "I have a dog",
+              "Yes a rabbit": "I have a rabbit",
+              "Yes a snake": "I have a snake",
+              "Yes a  guinea pig": "I have a guinea pig",
+              "Yes a guinea pig": "I have a guinea pig",
+              "Yes a goldfish": "I have a goldfish",
+              "Yes a parrot": "I have a parrot",
+              "Yes a cat and a dog": "I have a cat and a dog",
+              "Yes a pig": "I have a pig",
+              "Yes a rat": "I have a rat",
+              "Yes a spider": "I have a spider",
+              "No pets": "I don't have any pets",
+              "Yes a ferret": "I have a ferret",
+              "Yes an iguana": "I have an iguana",
+              "Yes a canary bird": "I have a canary bird",
+              "Yes a horse": "I have a horse",
+              "Yes a tortoise": "I have a tortoise",
+            };
+            return MAP[raw] ?? raw;
+          }
+          case 4: case 5: case 7: case 9: case 11:
+            // lowercase first char so it follows the preceding prose smoothly
+            return raw.charAt(0).toLowerCase() + raw.slice(1);
+          default:
+            return raw;
+        }
+      }
+
+      // Render the fully-filled paragraph (interviewee view).
+      function renderFilledParagraph(characterName, fullAnswerSheet) {
+        const map = {};
+        (fullAnswerSheet || []).forEach((a) => { map[a.question_id] = a.answer; });
+        let html = "";
+        for (const part of PARA_PARTS) {
+          if (part.text !== undefined) {
+            html += part.text;
+          } else if (part.qid === null) {
+            html += `<strong>${characterName || "[NAME]"}</strong>`;
+          } else {
+            const val = getAnswerForParagraph(part.qid, map[part.qid] || "");
+            html += `<strong>${val || "[" + part.label + "]"}</strong>`;
+          }
+        }
+        return html;
+      }
+
+      // Render the gapped paragraph (interviewer view).
+      // gapQids: array of question_ids that are blanked for this round.
+      // partnerCharacterName: always shown for NAME.
+      function renderGappedParagraphHtml(partnerCharacterName, gapQids) {
+        const gapSet = new Set(gapQids);
+        let html = "";
+        for (const part of PARA_PARTS) {
+          if (part.text !== undefined) {
+            html += part.text;
+          } else if (part.qid === null) {
+            html += `<strong>${partnerCharacterName || "[NAME]"}</strong>`;
+          } else if (gapSet.has(part.qid)) {
+            html += `<span style="display:inline-block;min-width:80px;border-bottom:2px solid #333;">&nbsp;</span>`;
+          } else {
+            html += `<span style="color:#bbb;">[${part.label}]</span>`;
+          }
+        }
+        return html;
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
       function updateKillCodeWatermark(state) {
         const wm = document.getElementById("killCodeWatermark");
         if (!wm || !state || !state.player) return;
@@ -675,10 +808,9 @@
 
       function computeMyAnswersKey(state) {
         try {
-          const sheet = (state && state.answerSheet) || [];
-          return sheet
-            .map((q) => `${q.question_id}:${q.my_answer || ""}`)
-            .join(";");
+          const sheet = (state && state.fullAnswerSheet) || [];
+          const name = state && state.player ? (state.player.character_name || "") : "";
+          return name + "|" + sheet.map((a) => `${a.question_id}:${a.answer || ""}`).join(";");
         } catch (e) {
           return String(Date.now());
         }
@@ -1468,13 +1600,14 @@
           if (key !== lastMyAnswersRenderKey) {
             lastMyAnswersRenderKey = key;
             myAnsDiv.innerHTML = "";
-            if (state.answerSheet) {
-              state.answerSheet.forEach((q) => {
-                const div = document.createElement("div");
-                div.className = "answer";
-                div.innerHTML = `<strong>${q.text}</strong><br>${q.my_answer}`;
-                myAnsDiv.appendChild(div);
-              });
+            if (state.fullAnswerSheet && state.fullAnswerSheet.length) {
+              const p = document.createElement("p");
+              p.style.lineHeight = "2";
+              p.innerHTML = renderFilledParagraph(
+                state.player && state.player.character_name,
+                state.fullAnswerSheet
+              );
+              myAnsDiv.appendChild(p);
             }
           }
         }
@@ -1629,13 +1762,14 @@
           if (key !== lastMyAnswersRenderKey) {
             lastMyAnswersRenderKey = key;
             myAnsDiv.innerHTML = "";
-            if (state.answerSheet) {
-              state.answerSheet.forEach((q) => {
-                const div = document.createElement("div");
-                div.className = "answer";
-                div.innerHTML = `<strong>${q.text}</strong><br>${q.my_answer}`;
-                myAnsDiv.appendChild(div);
-              });
+            if (state.fullAnswerSheet && state.fullAnswerSheet.length) {
+              const p = document.createElement("p");
+              p.style.lineHeight = "2";
+              p.innerHTML = renderFilledParagraph(
+                state.player && state.player.character_name,
+                state.fullAnswerSheet
+              );
+              myAnsDiv.appendChild(p);
             }
           }
         }
@@ -1847,7 +1981,20 @@
           }
         }
 
-        // For each question, create a text input to record partner's answer
+        // Gapped paragraph (read-only) — gaps shown as blanks, rest as grey labels
+        const gapQids = state.answerSheet.map((q) => q.question_id);
+        const paraWrapper = document.createElement("div");
+        paraWrapper.className = "answer";
+        const paraEl = document.createElement("p");
+        paraEl.style.lineHeight = "2";
+        paraEl.innerHTML = renderGappedParagraphHtml(
+          state.interviewTarget.character_name || "",
+          gapQids
+        );
+        paraWrapper.appendChild(paraEl);
+        questionsDiv.appendChild(paraWrapper);
+
+        // One labeled input per gap question, below the paragraph
         state.answerSheet.forEach((q) => {
           const wrapper = document.createElement("div");
           wrapper.className = "answer";
@@ -1862,10 +2009,7 @@
           input.setAttribute("data-question-id", q.question_id);
           input.style.width = "100%";
 
-          // Restore persisted draft value
           input.value = loadInterviewDraft(q.question_id);
-
-          // Save draft on every change
           input.addEventListener("input", () => {
             persistInterviewDraft(q.question_id, input.value.trim());
           });
@@ -1905,15 +2049,36 @@
         interviews.forEach((intv) => {
           const div = document.createElement("div");
           div.className = "answer";
+
           const header = document.createElement("div");
           header.innerHTML = `<strong>Interview with ${intv.interviewee_name}</strong>`;
           div.appendChild(header);
 
+          // Build a paragraph with the 3 recorded gaps filled in
+          const recordedMap = {};
           (intv.answers || []).forEach((a) => {
-            const line = document.createElement("div");
-            line.innerHTML = `<em>${a.question}</em><br>${a.reported_value}`;
-            div.appendChild(line);
+            recordedMap[a.question_id] = a.reported_value;
           });
+          const gapQids = new Set(Object.keys(recordedMap).map(Number));
+
+          let paraHtml = "";
+          for (const part of PARA_PARTS) {
+            if (part.text !== undefined) {
+              paraHtml += part.text;
+            } else if (part.qid === null) {
+              paraHtml += `<strong>${intv.interviewee_character_name || "[NAME]"}</strong>`;
+            } else if (gapQids.has(part.qid)) {
+              const val = getAnswerForParagraph(part.qid, recordedMap[part.qid] || "");
+              paraHtml += `<strong style="color:#1565c0">${val}</strong>`;
+            } else {
+              paraHtml += `<span style="color:#bbb;">[${part.label}]</span>`;
+            }
+          }
+
+          const paraEl = document.createElement("p");
+          paraEl.style.lineHeight = "2";
+          paraEl.innerHTML = paraHtml;
+          div.appendChild(paraEl);
 
           container.appendChild(div);
         });

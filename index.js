@@ -511,9 +511,9 @@ async function createFirstRoundWithMutations(gameId) {
     [round.round_number, gameId]
   );
 
-  // pick 3 random questions for this round (IDs 13–25 only)
+  // pick 3 random questions for this round (IDs 1–12 only)
   const qRes = await pool.query(
-    'SELECT id FROM questions WHERE id BETWEEN 13 AND 25 ORDER BY random() LIMIT 3'
+    'SELECT id FROM questions WHERE id BETWEEN 1 AND 12 ORDER BY random() LIMIT 3'
   );
   const selectedQuestions = qRes.rows; // [{id: ...}, ...]
 
@@ -525,7 +525,7 @@ async function createFirstRoundWithMutations(gameId) {
     );
   }
 
-  // restrict baddie mutations to this round's 4 questions
+  // restrict baddie mutations to this round's 3 questions
   const rqRes = await pool.query(
     `SELECT q.id
      FROM round_questions rq
@@ -596,9 +596,9 @@ async function createNextRoundWithMutations(gameId) {
     [round.round_number, gameId]
   );
 
-  // pick 3 random questions for this round (IDs 13–25 only)
+  // pick 3 random questions for this round (IDs 1–12 only)
   const qRes = await pool.query(
-    'SELECT id FROM questions WHERE id BETWEEN 13 AND 25 ORDER BY random() LIMIT 3'
+    'SELECT id FROM questions WHERE id BETWEEN 1 AND 12 ORDER BY random() LIMIT 3'
   );
   const selectedQuestions = qRes.rows;
 
@@ -610,7 +610,7 @@ async function createNextRoundWithMutations(gameId) {
     );
   }
 
-  // restrict baddie mutations to this round's 4 questions
+  // restrict baddie mutations to this round's 3 questions
   const rqRes = await pool.query(
     `SELECT q.id
      FROM round_questions rq
@@ -1088,6 +1088,7 @@ app.get('/me/current-state', async (req, res) => {
 
   let currentRound = null;
   let answerSheet = null;
+  let fullAnswerSheet = [];
   let pod = null;
   let podMembers = null;
   let interviewTarget = null;
@@ -1146,6 +1147,21 @@ app.get('/me/current-state', async (req, res) => {
         question_id: row.question_id,
         text: row.text,
         my_answer: mutatedMap[row.question_id] || row.answer_value,
+      }));
+
+      // full profile for paragraph rendering (all Q1–12, with mutations applied)
+      const fullProfileRes = await pool.query(
+        `SELECT q.id AS question_id, pp.answer_value
+         FROM questions q
+         JOIN player_profiles pp ON pp.question_id = q.id
+         WHERE q.id BETWEEN 1 AND 12
+           AND pp.game_player_id = $1
+         ORDER BY q.id`,
+        [player.id]
+      );
+      fullAnswerSheet = fullProfileRes.rows.map(row => ({
+        question_id: row.question_id,
+        answer: mutatedMap[row.question_id] || row.answer_value,
       }));
 
       // find this player's pod for the round
@@ -1217,11 +1233,13 @@ app.get('/me/current-state', async (req, res) => {
         `SELECT i.id AS interview_id,
                 i.interviewee_player_id,
                 gp.display_name AS interviewee_name,
+                c.name AS interviewee_character_name,
                 ia.question_id,
                 q.text AS question_text,
                 ia.reported_value
          FROM interviews i
          JOIN game_players gp ON gp.id = i.interviewee_player_id
+         LEFT JOIN characters c ON c.id = gp.character_id
          JOIN interview_answers ia ON ia.interview_id = i.id
          JOIN questions q ON q.id = ia.question_id
          WHERE i.round_id = $1
@@ -1240,6 +1258,7 @@ app.get('/me/current-state', async (req, res) => {
               interview_id: row.interview_id,
               interviewee_player_id: row.interviewee_player_id,
               interviewee_name: row.interviewee_name,
+              interviewee_character_name: row.interviewee_character_name,
               answers: []
             };
           }
@@ -1344,6 +1363,7 @@ app.get('/me/current-state', async (req, res) => {
     currentRound,
     currentSubround,
     answerSheet,
+    fullAnswerSheet,
     pod,
     podMembers,
     interviewTarget,

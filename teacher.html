@@ -658,6 +658,19 @@
         }
       }
 
+      async function advancePodSubround(podId) {
+        try {
+          await apiFetch(`/pods/${podId}/subround`, {
+            method: "POST",
+            body: { subround: 2 },
+          });
+          await refreshDebugAndGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error advancing pod (see console).");
+        }
+      }
+
       async function nextRound() {
         if (!currentGameId) return;
         if (!confirm("Create next round for game " + currentGameId + "?"))
@@ -1187,7 +1200,12 @@
         } else {
           let html = "";
           data.pods.forEach((pod) => {
-            html += `<div class="pod-label">${pod.label}</div>`;
+            const sr = pod.current_subround || 1;
+            const srBadge = `<span class="badge ${sr === 2 ? 'done' : 'todo'}">SR${sr}</span>`;
+            const advBtn = sr < 2
+              ? `<button class="secondary" style="font-size:11px;padding:2px 8px;margin-left:6px;" onclick="advancePodSubround(${pod.id})">→ SR2</button>`
+              : '';
+            html += `<div class="pod-label">${pod.label} ${srBadge}${advBtn}</div>`;
             if (!pod.members || !pod.members.length) {
               html += '<div class="small">No members.</div>';
               return;

@@ -1087,7 +1087,9 @@ app.get('/me/current-state', async (req, res) => {
     game = refreshed.rows[0];
   }
 
-  const currentSubround = game.current_subround || 1;
+  // Per-pod subround (resolved below); game-level is the fallback
+  const gameSubround = game.current_subround || 1;
+  let currentSubround = gameSubround;
 
   let currentRound = null;
   let answerSheet = null;
@@ -1129,6 +1131,21 @@ app.get('/me/current-state', async (req, res) => {
         [round.id, player.id]
       );
 
+      // find this player's pod for the round (needed before mutations)
+      const podRes = await pool.query(
+        `SELECT p.id, p.label, p.current_subround
+         FROM pods p
+         JOIN pod_members pm ON pm.pod_id = p.id
+         WHERE p.round_id = $1 AND pm.game_player_id = $2
+         LIMIT 1`,
+        [round.id, player.id]
+      );
+
+      // Use pod's subround if available (per-pod progression), else game-level fallback
+      currentSubround = podRes.rows.length > 0
+        ? (podRes.rows[0].current_subround || 1)
+        : gameSubround;
+
       let mutatedMap = {};
       if (player.role === 'baddie') {
         const mutRes = await pool.query(
@@ -1138,7 +1155,6 @@ app.get('/me/current-state', async (req, res) => {
           [round.id, player.id]
         );
         mutatedMap = mutRes.rows.reduce((acc, row) => {
-          // only apply mutation on the matching subround
           if (row.subround === currentSubround) {
             acc[row.question_id] = row.mutated_value;
           }
@@ -1152,7 +1168,6 @@ app.get('/me/current-state', async (req, res) => {
         my_answer: mutatedMap[row.question_id] || row.answer_value,
       }));
 
-      // full profile for paragraph rendering (all Q1–12, with mutations applied)
       const fullProfileRes = await pool.query(
         `SELECT q.id AS question_id, pp.answer_value
          FROM questions q
@@ -1167,20 +1182,11 @@ app.get('/me/current-state', async (req, res) => {
         answer: mutatedMap[row.question_id] || row.answer_value,
       }));
 
-      // find this player's pod for the round
-      const podRes = await pool.query(
-        `SELECT p.id, p.label
-         FROM pods p
-         JOIN pod_members pm ON pm.pod_id = p.id
-         WHERE p.round_id = $1 AND pm.game_player_id = $2
-         LIMIT 1`,
-        [round.id, player.id]
-      );
-
       if (podRes.rows.length > 0) {
         pod = {
           id: podRes.rows[0].id,
           label: podRes.rows[0].label,
+          current_subround: podRes.rows[0].current_subround || 1,
         };
 
         const membersRes = await pool.query(
@@ -2166,7 +2172,7 @@ if (round) {
   let pods = [];
   if (round) {
     const podsRes = await pool.query(
-      `SELECT id, label
+      `SELECT id, label, current_subround
        FROM pods
        WHERE round_id = $1
        ORDER BY id`,
@@ -2186,6 +2192,7 @@ if (round) {
       pods.push({
         id: p.id,
         label: p.label,
+        current_subround: p.current_subround || 1,
         members: membersRes.rows
       });
     }
@@ -2290,6 +2297,21 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`API listening on port ${PORT}`);
 });
+// teacher: advance a single pod to subround 2
+app.post('/pods/:podId/subround', async (req, res) => {
+  const podId = Number(req.params.podId);
+  const { subround } = req.body;
+  const sr = Number(subround);
+  if (!sr || sr < 1 || sr > 2) return res.status(400).json({ error: 'Invalid subround' });
+
+  const result = await pool.query(
+    'UPDATE pods SET current_subround = $1 WHERE id = $2 RETURNING id, label, current_subround',
+    [sr, podId]
+  );
+  if (!result.rows.length) return res.status(404).json({ error: 'Pod not found' });
+  res.json({ ok: true, pod: result.rows[0] });
+});
+
 // teacher: set game phase (rally, interview1, interview2, feedback, voting)
 app.post('/games/:id/phase', async (req, res) => {
   const gameId = Number(req.params.id);
@@ -2308,7 +2330,7 @@ app.post('/games/:id/phase', async (req, res) => {
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    // Optionally tie subround to interview phases
+    // Tie subround to interview phases; interview2 also overrides all pods
     let subroundUpdate = null;
     if (phase === 'interview1') subroundUpdate = 1;
     if (phase === 'interview2') subroundUpdate = 2;
@@ -2318,6 +2340,18 @@ app.post('/games/:id/phase', async (req, res) => {
         'UPDATE games SET phase = $1, current_subround = $2 WHERE id = $3',
         [phase, subroundUpdate, gameId]
       );
+      if (subroundUpdate === 2) {
+        // override all pods in the current round to SR2
+        await pool.query(
+          `UPDATE pods SET current_subround = 2
+           WHERE round_id = (
+             SELECT id FROM rounds WHERE game_id = $1 AND round_number = (
+               SELECT current_round FROM games WHERE id = $1
+             )
+           )`,
+          [gameId]
+        );
+      }
     } else {
       await pool.query(
         'UPDATE games SET phase = $1 WHERE id = $2',

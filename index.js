@@ -1200,7 +1200,8 @@ app.get('/me/current-state', async (req, res) => {
                   gp.is_alive,
                   gp.role AS interviewee_role,
                   c.name AS character_name,
-                  c.avatar_file AS character_avatar_file
+                  c.avatar_file AS character_avatar_file,
+                  c.gender AS character_gender
           FROM interview_assignments ia
           JOIN game_players gp ON gp.id = ia.interviewee_player_id
           LEFT JOIN characters c ON c.id = gp.character_id
@@ -1218,6 +1219,7 @@ app.get('/me/current-state', async (req, res) => {
             is_alive: assignRes.rows[0].is_alive,
             character_name: assignRes.rows[0].character_name,
             character_avatar_file: assignRes.rows[0].character_avatar_file,
+            gender: assignRes.rows[0].character_gender,
           };
 
           // If requester is a baddie, reveal whether the current interviewee is also a baddie.

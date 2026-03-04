@@ -641,53 +641,56 @@
         { text: "." },
       ];
 
-      // Gender map for all 26 characters (M/F)
-      const CHAR_GENDER = {
-        Anne: "F", Barry: "M", Charlie: "M", Daisy: "F", Eddie: "M",
-        Fiona: "F", George: "M", Holly: "F", Isaac: "M", Jenna: "F",
-        Kevin: "M", Lily: "F", Mason: "M", Nora: "F", Oscar: "M",
-        Poppy: "F", Quinn: "F", Ruby: "F", Sammy: "F", Tina: "F",
-        Uma: "F", Victor: "M", Wendy: "F", Xander: "M", Yara: "F",
-        Zack: "M",
-      };
-
-      // 3rd person template — interviewer's view of partner, gender-specific
-      function getPara3PParts(gender) {
-        const sub  = gender === "M" ? "His" : gender === "F" ? "Her" : "Their";
-        const they = gender === "M" ? "he" : gender === "F" ? "she" : "they";
-        const theyRe = gender === "M" ? "he's" : gender === "F" ? "she's" : "they're";
-        const theirFav = gender === "M" ? "his favourite" : gender === "F" ? "her favourite" : "their favourite";
-        const theySleep = gender === "M" ? "He usually sleeps" : gender === "F" ? "She usually sleeps" : "They usually sleep";
-        const theyGo = gender === "M" ? "He goes" : gender === "F" ? "She goes" : "They go";
-        return [
-          { text: `${sub} name is ` },
-          { qid: null, label: "NAME" },
-          { text: ` and ${theyRe} ` },
-          { qid: 1, label: "AGE" },
-          { text: ` years old. ${they.charAt(0).toUpperCase() + they.slice(1)}'s from ` },
-          { qid: 2, label: "HOMETOWN" },
-          { text: `. ${they.charAt(0).toUpperCase() + they.slice(1)} work${gender === "M" || gender === "F" ? "s" : ""} as ` },
-          { qid: 10, label: "JOB" },
-          { text: ` and ${they} travel${gender === "M" || gender === "F" ? "s" : ""} to work ` },
-          { qid: 8, label: "TRAVEL" },
-          { text: `. At the weekend ${they} usually ` },
-          { qid: 3, label: "WEEKEND" },
-          { text: `. In the morning ${they} get${gender === "M" || gender === "F" ? "s" : ""} up at ` },
-          { qid: 6, label: "WAKE TIME" },
-          { text: ` and ${they} have${gender === "M" || gender === "F" ? "s" : ""} ` },
-          { qid: 5, label: "BREAKFAST" },
-          { text: ` for breakfast. ${theirFav.charAt(0).toUpperCase() + theirFav.slice(1)} food is ` },
-          { qid: 7, label: "FAVOURITE FOOD" },
-          { text: ` and ${theirFav} colour is ` },
-          { qid: 9, label: "FAVOURITE COLOUR" },
-          { text: `. ${theySleep} ` },
-          { qid: 11, label: "SLEEP" },
-          { text: ` a night. ${theyGo} to the hairdresser ` },
-          { qid: 4, label: "HAIRDRESSER" },
-          { text: ". " },
-          { qid: 12, label: "PETS" },
-          { text: "." },
-        ];
+      // 3rd person templates — interviewer's view of partner
+      const PARA_PARTS_M = [
+        { text: "His name is " }, { qid: null, label: "NAME" },
+        { text: " and he's " }, { qid: 1, label: "AGE" },
+        { text: " years old. He's from " }, { qid: 2, label: "HOMETOWN" },
+        { text: ". He works as " }, { qid: 10, label: "JOB" },
+        { text: " and he travels to work " }, { qid: 8, label: "TRAVEL" },
+        { text: ". At the weekend he usually " }, { qid: 3, label: "WEEKEND" },
+        { text: ". In the morning he gets up at " }, { qid: 6, label: "WAKE TIME" },
+        { text: " and he has " }, { qid: 5, label: "BREAKFAST" },
+        { text: " for breakfast. His favourite food is " }, { qid: 7, label: "FAVOURITE FOOD" },
+        { text: " and his favourite colour is " }, { qid: 9, label: "FAVOURITE COLOUR" },
+        { text: ". He usually sleeps " }, { qid: 11, label: "SLEEP" },
+        { text: " a night. He goes to the hairdresser " }, { qid: 4, label: "HAIRDRESSER" },
+        { text: ". " }, { qid: 12, label: "PETS" }, { text: "." },
+      ];
+      const PARA_PARTS_F = [
+        { text: "Her name is " }, { qid: null, label: "NAME" },
+        { text: " and she's " }, { qid: 1, label: "AGE" },
+        { text: " years old. She's from " }, { qid: 2, label: "HOMETOWN" },
+        { text: ". She works as " }, { qid: 10, label: "JOB" },
+        { text: " and she travels to work " }, { qid: 8, label: "TRAVEL" },
+        { text: ". At the weekend she usually " }, { qid: 3, label: "WEEKEND" },
+        { text: ". In the morning she gets up at " }, { qid: 6, label: "WAKE TIME" },
+        { text: " and she has " }, { qid: 5, label: "BREAKFAST" },
+        { text: " for breakfast. Her favourite food is " }, { qid: 7, label: "FAVOURITE FOOD" },
+        { text: " and her favourite colour is " }, { qid: 9, label: "FAVOURITE COLOUR" },
+        { text: ". She usually sleeps " }, { qid: 11, label: "SLEEP" },
+        { text: " a night. She goes to the hairdresser " }, { qid: 4, label: "HAIRDRESSER" },
+        { text: ". " }, { qid: 12, label: "PETS" }, { text: "." },
+      ];
+      const PARA_PARTS_N = [
+        { text: "Their name is " }, { qid: null, label: "NAME" },
+        { text: " and they're " }, { qid: 1, label: "AGE" },
+        { text: " years old. They're from " }, { qid: 2, label: "HOMETOWN" },
+        { text: ". They work as " }, { qid: 10, label: "JOB" },
+        { text: " and they travel to work " }, { qid: 8, label: "TRAVEL" },
+        { text: ". At the weekend they usually " }, { qid: 3, label: "WEEKEND" },
+        { text: ". In the morning they get up at " }, { qid: 6, label: "WAKE TIME" },
+        { text: " and they have " }, { qid: 5, label: "BREAKFAST" },
+        { text: " for breakfast. Their favourite food is " }, { qid: 7, label: "FAVOURITE FOOD" },
+        { text: " and their favourite colour is " }, { qid: 9, label: "FAVOURITE COLOUR" },
+        { text: ". They usually sleep " }, { qid: 11, label: "SLEEP" },
+        { text: " a night. They go to the hairdresser " }, { qid: 4, label: "HAIRDRESSER" },
+        { text: ". " }, { qid: 12, label: "PETS" }, { text: "." },
+      ];
+      function getParaParts3P(gender) {
+        if (gender === "M") return PARA_PARTS_M;
+        if (gender === "F") return PARA_PARTS_F;
+        return PARA_PARTS_N;
       }
 
       // Transform raw DB answers into paragraph-friendly form.
@@ -772,30 +775,27 @@
       // 3rd-person variant of the answer transform.
       function getAnswerForParagraph3P(qid, raw, gender) {
         const base = getAnswerForParagraph(qid, raw);
-        if (qid === 3) {
-          // Verb conjugation for 3rd-person singular
-          if (gender === "M" || gender === "F") {
-            return base
-              .replace(/^go\b/, "goes")
-              .replace(/^do\b/, "does")
-              .replace(/^watch\b/, "watches")
-              .replace(/^play\b/, "plays")
-              .replace(/^relax\b/, "relaxes")
-              .replace(/^read\b/, "reads")
-              .replace(/^cook\b/, "cooks")
-              .replace(/^swim\b/, "swims")
-              .replace(/^run\b/, "runs")
-              .replace(/^visit\b/, "visits")
-              .replace(/^meet\b/, "meets")
-              .replace(/^stay\b/, "stays")
-              .replace(/^(\w+)\b/, (m) => (m.endsWith("s") || m.endsWith("es")) ? m : m + "s");
-          }
-          return base;
+        if (qid === 3 && (gender === "M" || gender === "F")) {
+          // Conjugate to 3rd-person singular
+          return base
+            .replace(/^go\b/, "goes")
+            .replace(/^do\b/, "does")
+            .replace(/^watch\b/, "watches")
+            .replace(/^play\b/, "plays")
+            .replace(/^relax\b/, "relaxes")
+            .replace(/^read\b/, "reads")
+            .replace(/^cook\b/, "cooks")
+            .replace(/^swim\b/, "swims")
+            .replace(/^run\b/, "runs")
+            .replace(/^visit\b/, "visits")
+            .replace(/^meet\b/, "meets")
+            .replace(/^stay\b/, "stays")
+            .replace(/^(\w+)$/, (m) => (m.endsWith("s") || m.endsWith("es")) ? m : m + "s");
         }
         if (qid === 12) {
           const pronoun = gender === "M" ? "He" : gender === "F" ? "She" : "They";
-          const verb    = gender === "M" || gender === "F" ? "has" : "have";
-          const doesnt  = gender === "M" || gender === "F" ? "doesn't" : "don't";
+          const verb    = (gender === "M" || gender === "F") ? "has" : "have";
+          const doesnt  = (gender === "M" || gender === "F") ? "doesn't" : "don't";
           return base
             .replace(/^I have\b/, `${pronoun} ${verb}`)
             .replace(/^I don't have\b/, `${pronoun} ${doesnt} have`);
@@ -806,13 +806,12 @@
       // Build the gapped paragraph as a DOM <p> element (interviewer view).
       // Gap slots become inline <input> elements; all other fields are filled
       // from partnerAnswerMap (the partner's actual Q1–12 answers).
-      function buildGappedParagraphDom(partnerCharName, partnerAnswerMap, gapQids) {
+      function buildGappedParagraphDom(partnerCharName, partnerAnswerMap, gapQids, gender) {
         const gapSet = new Set(gapQids);
-        const gender = CHAR_GENDER[partnerCharName] || null;
         const p = document.createElement("p");
         p.style.lineHeight = "2.4";
 
-        for (const part of getPara3PParts(gender)) {
+        for (const part of getParaParts3P(gender)) {
           if (part.text !== undefined) {
             p.appendChild(document.createTextNode(part.text));
           } else if (part.qid === null) {
@@ -2108,7 +2107,8 @@
         paraWrapper.appendChild(buildGappedParagraphDom(
           state.interviewTarget.character_name || "",
           partnerAnswerMap,
-          gapQids
+          gapQids,
+          state.interviewTarget.gender || null
         ));
         questionsDiv.appendChild(paraWrapper);
       }

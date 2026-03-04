@@ -2204,7 +2204,7 @@
           remindBtn.textContent = "Remind me";
           remindBtn.style.cssText = "margin-top:6px;font-size:13px;padding:4px 12px;";
           remindBtn.addEventListener("click", async () => {
-            const token = localStorage.getItem("playerToken");
+            const token = localStorage.getItem("truthseekers-token");
             if (token) {
               fetch(`${API}/me/remind`, {
                 method: "POST",

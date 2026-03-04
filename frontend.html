@@ -2148,30 +2148,36 @@
           header.innerHTML = `<strong>Interview with ${intv.interviewee_name}</strong>`;
           div.appendChild(header);
 
-          // Build a paragraph with the 3 recorded gaps filled in
+          // Build a 3rd-person paragraph with only the 3 recorded gaps filled
+          const gender = intv.interviewee_gender || null;
           const recordedMap = {};
           (intv.answers || []).forEach((a) => {
             recordedMap[a.question_id] = a.reported_value;
           });
           const gapQids = new Set(Object.keys(recordedMap).map(Number));
 
-          let paraHtml = "";
-          for (const part of PARA_PARTS) {
-            if (part.text !== undefined) {
-              paraHtml += part.text;
-            } else if (part.qid === null) {
-              paraHtml += `<strong>${intv.interviewee_character_name || "[NAME]"}</strong>`;
-            } else if (gapQids.has(part.qid)) {
-              const val = getAnswerForParagraph(part.qid, recordedMap[part.qid] || "");
-              paraHtml += `<strong style="color:#1565c0">${val}</strong>`;
-            } else {
-              paraHtml += `<span style="color:#bbb;">[${part.label}]</span>`;
-            }
-          }
-
           const paraEl = document.createElement("p");
           paraEl.style.lineHeight = "2";
-          paraEl.innerHTML = paraHtml;
+          for (const part of getParaParts3P(gender)) {
+            if (part.text !== undefined) {
+              paraEl.appendChild(document.createTextNode(part.text));
+            } else if (part.qid === null) {
+              const s = document.createElement("strong");
+              s.textContent = intv.interviewee_character_name || "[NAME]";
+              paraEl.appendChild(s);
+            } else if (gapQids.has(part.qid)) {
+              const val = getAnswerForParagraph3P(part.qid, recordedMap[part.qid] || "", gender);
+              const s = document.createElement("strong");
+              s.style.color = "#1565c0";
+              s.textContent = val;
+              paraEl.appendChild(s);
+            } else {
+              const span = document.createElement("span");
+              span.style.color = "#bbb";
+              span.textContent = `[${part.label}]`;
+              paraEl.appendChild(span);
+            }
+          }
           div.appendChild(paraEl);
 
           container.appendChild(div);

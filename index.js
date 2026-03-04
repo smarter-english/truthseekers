@@ -1252,6 +1252,7 @@ app.get('/me/current-state', async (req, res) => {
                 i.interviewee_player_id,
                 gp.display_name AS interviewee_name,
                 c.name AS interviewee_character_name,
+                c.gender AS interviewee_gender,
                 ia.question_id,
                 q.text AS question_text,
                 ia.reported_value
@@ -1277,6 +1278,7 @@ app.get('/me/current-state', async (req, res) => {
               interviewee_player_id: row.interviewee_player_id,
               interviewee_name: row.interviewee_name,
               interviewee_character_name: row.interviewee_character_name,
+              interviewee_gender: row.interviewee_gender,
               answers: []
             };
           }

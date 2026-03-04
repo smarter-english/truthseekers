@@ -671,6 +671,16 @@
         }
       }
 
+      async function advancePodFeedback(podId) {
+        try {
+          await apiFetch(`/pods/${podId}/feedback`, { method: "POST" });
+          await refreshDebugAndGames();
+        } catch (err) {
+          console.error(err);
+          alert("Error advancing pod to feedback (see console).");
+        }
+      }
+
       async function nextRound() {
         if (!currentGameId) return;
         if (!confirm("Create next round for game " + currentGameId + "?"))
@@ -1202,10 +1212,14 @@
           data.pods.forEach((pod) => {
             const sr = pod.current_subround || 1;
             const srBadge = `<span class="badge ${sr === 2 ? 'done' : 'todo'}">SR${sr}</span>`;
-            const advBtn = sr < 2
+            const fbBadge = pod.feedback_ready ? `<span class="badge done">feedback</span>` : '';
+            const advBtn = (sr < 2 && !pod.feedback_ready)
               ? `<button class="secondary" style="font-size:11px;padding:2px 8px;margin-left:6px;" onclick="advancePodSubround(${pod.id})">→ SR2</button>`
               : '';
-            html += `<div class="pod-label">${pod.label} ${srBadge}${advBtn}</div>`;
+            const fbBtn = !pod.feedback_ready
+              ? `<button class="secondary" style="font-size:11px;padding:2px 8px;margin-left:6px;" onclick="advancePodFeedback(${pod.id})">→ Feedback</button>`
+              : '';
+            html += `<div class="pod-label">${pod.label} ${srBadge}${fbBadge}${advBtn}${fbBtn}</div>`;
             if (!pod.members || !pod.members.length) {
               html += '<div class="small">No members.</div>';
               return;

@@ -1133,7 +1133,7 @@ app.get('/me/current-state', async (req, res) => {
 
       // find this player's pod for the round (needed before mutations)
       const podRes = await pool.query(
-        `SELECT p.id, p.label, p.current_subround
+        `SELECT p.id, p.label, p.current_subround, p.feedback_ready
          FROM pods p
          JOIN pod_members pm ON pm.pod_id = p.id
          WHERE p.round_id = $1 AND pm.game_player_id = $2
@@ -1183,11 +1183,16 @@ app.get('/me/current-state', async (req, res) => {
       }));
 
       if (podRes.rows.length > 0) {
+        const podRow = podRes.rows[0];
         pod = {
-          id: podRes.rows[0].id,
-          label: podRes.rows[0].label,
-          current_subround: podRes.rows[0].current_subround || 1,
+          id: podRow.id,
+          label: podRow.label,
+          current_subround: podRow.current_subround || 1,
+          feedback_ready: !!podRow.feedback_ready,
         };
+
+        // Pod marked feedback-ready: suppress interview target so interview form hides
+        if (pod.feedback_ready) interviewTarget = null;
 
         const membersRes = await pool.query(
           `SELECT gp.id,
@@ -1203,6 +1208,7 @@ app.get('/me/current-state', async (req, res) => {
         );
         podMembers = membersRes.rows;
 
+        if (!pod.feedback_ready) {
         const assignRes = await pool.query(
           `SELECT ia.interviewee_player_id,
                   gp.display_name,
@@ -1253,6 +1259,7 @@ app.get('/me/current-state', async (req, res) => {
             answer: r.answer_value,
           }));
         }
+        } // end if (!pod.feedback_ready)
       }
 
       // interviews this player conducted in this round (for feedback)
@@ -2172,7 +2179,7 @@ if (round) {
   let pods = [];
   if (round) {
     const podsRes = await pool.query(
-      `SELECT id, label, current_subround
+      `SELECT id, label, current_subround, feedback_ready
        FROM pods
        WHERE round_id = $1
        ORDER BY id`,
@@ -2193,6 +2200,7 @@ if (round) {
         id: p.id,
         label: p.label,
         current_subround: p.current_subround || 1,
+        feedback_ready: !!p.feedback_ready,
         members: membersRes.rows
       });
     }
@@ -2297,6 +2305,17 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`API listening on port ${PORT}`);
 });
+// teacher: mark a pod as feedback-ready (suppresses interview form for those players)
+app.post('/pods/:podId/feedback', async (req, res) => {
+  const podId = Number(req.params.podId);
+  const result = await pool.query(
+    'UPDATE pods SET feedback_ready = TRUE WHERE id = $1 RETURNING id, label',
+    [podId]
+  );
+  if (!result.rows.length) return res.status(404).json({ error: 'Pod not found' });
+  res.json({ ok: true, pod: result.rows[0] });
+});
+
 // teacher: advance a single pod to subround 2
 app.post('/pods/:podId/subround', async (req, res) => {
   const podId = Number(req.params.podId);
@@ -2357,6 +2376,18 @@ app.post('/games/:id/phase', async (req, res) => {
         'UPDATE games SET phase = $1 WHERE id = $2',
         [phase, gameId]
       );
+      if (phase === 'feedback') {
+        // override all pods in current round to feedback_ready
+        await pool.query(
+          `UPDATE pods SET feedback_ready = TRUE
+           WHERE round_id = (
+             SELECT id FROM rounds WHERE game_id = $1 AND round_number = (
+               SELECT current_round FROM games WHERE id = $1
+             )
+           )`,
+          [gameId]
+        );
+      }
     }
 
     res.json({ ok: true, game_id: gameId, phase });

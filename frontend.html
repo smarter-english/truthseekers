@@ -1784,8 +1784,11 @@
         buildFeedbackSection(state);
         buildVoteSection(state);
 
-        // Handle phase changes (tab changes)
-        const phase = state.phase || (state.game && state.game.phase);
+        // Handle phase changes (tab changes); pod feedback_ready overrides to feedback
+        const gamePhase2 = state.phase || (state.game && state.game.phase);
+        const phase = (state.pod && state.pod.feedback_ready && (gamePhase2 === "interview1" || gamePhase2 === "interview2"))
+          ? "feedback"
+          : gamePhase2;
         const banner = document.getElementById("phaseBanner");
 
         // Update round/phase label in header
@@ -1938,8 +1941,11 @@
         buildVoteSection(state);
         buildRallySection(state);
 
-        // Auto-select tab based on game phase
-        const phase = state.phase || (state.game && state.game.phase);
+        // Auto-select tab based on game phase (pod feedback_ready overrides to feedback)
+        const gamePhase = state.phase || (state.game && state.game.phase);
+        const phase = (state.pod && state.pod.feedback_ready && (gamePhase === "interview1" || gamePhase === "interview2"))
+          ? "feedback"
+          : gamePhase;
 
         // Show notification banner when phase changes
         const banner = document.getElementById("phaseBanner");

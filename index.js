@@ -1225,6 +1225,22 @@ app.get('/me/current-state', async (req, res) => {
           if (player.role === 'baddie') {
             interviewTarget.is_baddie = assignRes.rows[0].interviewee_role === 'baddie';
           }
+
+          // Fetch the interviewee's full Q1–12 answers so the interviewer can
+          // see all non-gap fields filled in the paragraph.
+          const itProfileRes = await pool.query(
+            `SELECT q.id AS question_id, pp.answer_value
+             FROM questions q
+             JOIN player_profiles pp ON pp.question_id = q.id
+             WHERE q.id BETWEEN 1 AND 12
+               AND pp.game_player_id = $1
+             ORDER BY q.id`,
+            [assignRes.rows[0].interviewee_player_id]
+          );
+          interviewTarget.full_answer_sheet = itProfileRes.rows.map(r => ({
+            question_id: r.question_id,
+            answer: r.answer_value,
+          }));
         }
       }
 

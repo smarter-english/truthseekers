@@ -606,9 +606,11 @@
     </div>
 
     <script>
-      // ── Paragraph template ──────────────────────────────────────────────────
+      // ── Paragraph templates ─────────────────────────────────────────────────
       // Each part is either { text } (literal) or { qid, label } (a field).
       // qid: null = character name (always filled); qid: N = question id.
+
+      // 1st person — interviewee's own view
       const PARA_PARTS = [
         { text: "My name is " },
         { qid: null, label: "NAME" },
@@ -633,6 +635,37 @@
         { text: ". I usually sleep " },
         { qid: 11, label: "SLEEP" },
         { text: " a night. I go to the hairdresser " },
+        { qid: 4, label: "HAIRDRESSER" },
+        { text: ". " },
+        { qid: 12, label: "PETS" },
+        { text: "." },
+      ];
+
+      // 3rd person — interviewer's view of partner
+      const PARA_PARTS_3P = [
+        { text: "Their name is " },
+        { qid: null, label: "NAME" },
+        { text: " and they're " },
+        { qid: 1, label: "AGE" },
+        { text: " years old. They're from " },
+        { qid: 2, label: "HOMETOWN" },
+        { text: ". They work as " },
+        { qid: 10, label: "JOB" },
+        { text: " and they travel to work " },
+        { qid: 8, label: "TRAVEL" },
+        { text: ". At the weekend they usually " },
+        { qid: 3, label: "WEEKEND" },
+        { text: ". In the morning they get up at " },
+        { qid: 6, label: "WAKE TIME" },
+        { text: " and they have " },
+        { qid: 5, label: "BREAKFAST" },
+        { text: " for breakfast. Their favourite food is " },
+        { qid: 7, label: "FAVOURITE FOOD" },
+        { text: " and their favourite colour is " },
+        { qid: 9, label: "FAVOURITE COLOUR" },
+        { text: ". They usually sleep " },
+        { qid: 11, label: "SLEEP" },
+        { text: " a night. They go to the hairdresser " },
         { qid: 4, label: "HAIRDRESSER" },
         { text: ". " },
         { qid: 12, label: "PETS" },
@@ -718,24 +751,61 @@
         return html;
       }
 
-      // Render the gapped paragraph (interviewer view).
-      // gapQids: array of question_ids that are blanked for this round.
-      // partnerCharacterName: always shown for NAME.
-      function renderGappedParagraphHtml(partnerCharacterName, gapQids) {
+      // 3rd-person variant of the answer transform (only Q12 differs).
+      function getAnswerForParagraph3P(qid, raw) {
+        const base = getAnswerForParagraph(qid, raw);
+        if (qid === 12) return base.replace(/^I /, "They ");
+        return base;
+      }
+
+      // Build the gapped paragraph as a DOM <p> element (interviewer view).
+      // Gap slots become inline <input> elements; all other fields are filled
+      // from partnerAnswerMap (the partner's actual Q1–12 answers).
+      function buildGappedParagraphDom(partnerCharName, partnerAnswerMap, gapQids) {
         const gapSet = new Set(gapQids);
-        let html = "";
-        for (const part of PARA_PARTS) {
+        const p = document.createElement("p");
+        p.style.lineHeight = "2.4";
+
+        for (const part of PARA_PARTS_3P) {
           if (part.text !== undefined) {
-            html += part.text;
+            p.appendChild(document.createTextNode(part.text));
           } else if (part.qid === null) {
-            html += `<strong>${partnerCharacterName || "[NAME]"}</strong>`;
+            // Character name — always filled
+            const strong = document.createElement("strong");
+            strong.textContent = partnerCharName || "[NAME]";
+            p.appendChild(strong);
           } else if (gapSet.has(part.qid)) {
-            html += `<span style="display:inline-block;min-width:80px;border-bottom:2px solid #333;">&nbsp;</span>`;
+            // Gap — inline text input
+            const input = document.createElement("input");
+            input.type = "text";
+            input.setAttribute("data-question-id", part.qid);
+            input.style.cssText = [
+              "display:inline-block",
+              "width:130px",
+              "border:none",
+              "border-bottom:2px solid #333",
+              "outline:none",
+              "padding:2px 4px",
+              "font-size:inherit",
+              "font-family:inherit",
+              "background:transparent",
+              "vertical-align:baseline",
+            ].join(";");
+            input.value = loadInterviewDraft(part.qid);
+            input.addEventListener("input", () => {
+              persistInterviewDraft(part.qid, input.value.trim());
+            });
+            p.appendChild(input);
           } else {
-            html += `<span style="color:#bbb;">[${part.label}]</span>`;
+            // Non-gap — filled with partner's actual answer
+            const raw = (partnerAnswerMap || {})[part.qid] || "";
+            const val = getAnswerForParagraph3P(part.qid, raw);
+            const strong = document.createElement("strong");
+            strong.textContent = val || "[" + part.label + "]";
+            p.appendChild(strong);
           }
         }
-        return html;
+        return p;
       }
       // ────────────────────────────────────────────────────────────────────────
 
@@ -1981,42 +2051,20 @@
           }
         }
 
-        // Gapped paragraph (read-only) — gaps shown as blanks, rest as grey labels
+        // Build gapped paragraph with inline inputs for the 3 gap slots
         const gapQids = state.answerSheet.map((q) => q.question_id);
+        const partnerAnswerMap = {};
+        ((state.interviewTarget && state.interviewTarget.full_answer_sheet) || [])
+          .forEach((a) => { partnerAnswerMap[a.question_id] = a.answer; });
+
         const paraWrapper = document.createElement("div");
         paraWrapper.className = "answer";
-        const paraEl = document.createElement("p");
-        paraEl.style.lineHeight = "2";
-        paraEl.innerHTML = renderGappedParagraphHtml(
+        paraWrapper.appendChild(buildGappedParagraphDom(
           state.interviewTarget.character_name || "",
+          partnerAnswerMap,
           gapQids
-        );
-        paraWrapper.appendChild(paraEl);
+        ));
         questionsDiv.appendChild(paraWrapper);
-
-        // One labeled input per gap question, below the paragraph
-        state.answerSheet.forEach((q) => {
-          const wrapper = document.createElement("div");
-          wrapper.className = "answer";
-
-          const label = document.createElement("div");
-          label.innerHTML = `<strong>${q.text}</strong>`;
-          wrapper.appendChild(label);
-
-          const input = document.createElement("input");
-          input.type = "text";
-          input.placeholder = "What did they say?";
-          input.setAttribute("data-question-id", q.question_id);
-          input.style.width = "100%";
-
-          input.value = loadInterviewDraft(q.question_id);
-          input.addEventListener("input", () => {
-            persistInterviewDraft(q.question_id, input.value.trim());
-          });
-
-          wrapper.appendChild(input);
-          questionsDiv.appendChild(wrapper);
-        });
       }
 
       function buildFeedbackSection(state) {

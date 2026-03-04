@@ -431,6 +431,27 @@
         display: block;
         animation: toastIn 0.2s ease-out;
       }
+      #killCodeToast {
+        position: fixed;
+        left: 50%;
+        top: 24px;
+        transform: translateX(-50%);
+        background: rgba(180, 0, 0, 0.93);
+        color: #fff;
+        padding: 12px 22px;
+        border-radius: 10px;
+        font-size: 22px;
+        font-weight: 900;
+        letter-spacing: 0.15em;
+        display: none;
+        z-index: 10003;
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+        text-align: center;
+      }
+      #killCodeToast.show {
+        display: block;
+        animation: toastIn 0.2s ease-out;
+      }
       @keyframes toastIn {
         from {
           opacity: 0;
@@ -509,6 +530,7 @@
         </div>
 
         <div id="strikeToast" aria-live="polite"></div>
+        <div id="killCodeToast" aria-live="assertive"></div>
 
         <div
           id="gameOverModal"
@@ -920,6 +942,7 @@
       let lastVoteRenderKey = null;
       let lastSeenStrikes = null;
       let strikeToastTimeoutId = null;
+      let lastSeenBroadcastSeq = null;
 
       function computeMyAnswersKey(state) {
         try {
@@ -1188,6 +1211,24 @@
         if (strikes > lastSeenStrikes) {
           lastSeenStrikes = strikes;
           showStrikeToast(strikes);
+        }
+      }
+
+      function showKillCodeToast(killCode) {
+        const t = document.getElementById("killCodeToast");
+        if (!t) return;
+        t.textContent = `🔴 ${killCode}`;
+        t.classList.add("show");
+        setTimeout(() => t.classList.remove("show"), 1000);
+      }
+
+      function maybeShowKillCodeToast(state) {
+        if (!state || !state.killCodeToast) return;
+        const { kill_code, seq } = state.killCodeToast;
+        if (lastSeenBroadcastSeq === null) { lastSeenBroadcastSeq = seq; return; }
+        if (seq > lastSeenBroadcastSeq) {
+          lastSeenBroadcastSeq = seq;
+          showKillCodeToast(kill_code);
         }
       }
 
@@ -1475,6 +1516,7 @@
           lastSeenEliminationSeq = 0;
           lastPodRenderKey = null;
           lastSeenStrikes = null;
+          lastSeenBroadcastSeq = null;
           hideStrikeToast();
           hideKillCodeWatermark();
 
@@ -1630,6 +1672,7 @@
         lastSeenForceLogoutSeq = 0;
         lastPodRenderKey = null;
         lastSeenStrikes = null;
+        lastSeenBroadcastSeq = null;
         hideStrikeToast();
         hideKillCodeWatermark();
 
@@ -1672,6 +1715,7 @@
         updateWaitingUI(state);
         updateFinishedUI(state);
         maybeShowStrikeToast(state);
+        maybeShowKillCodeToast(state);
         updateKillCodeWatermark(state);
 
         // If the game hasn't started yet, don't render or switch gameplay tabs.
@@ -2148,37 +2192,32 @@
           header.innerHTML = `<strong>Interview with ${intv.interviewee_name}</strong>`;
           div.appendChild(header);
 
-          // Build a 3rd-person paragraph with only the 3 recorded gaps filled
-          const gender = intv.interviewee_gender || null;
-          const recordedMap = {};
-          (intv.answers || []).forEach((a) => {
-            recordedMap[a.question_id] = a.reported_value;
-          });
-          const gapQids = new Set(Object.keys(recordedMap).map(Number));
+          // Remind me button + hidden answer peek (3 seconds)
+          const answers = (intv.answers || []).map(a => a.reported_value).filter(Boolean);
 
-          const paraEl = document.createElement("p");
-          paraEl.style.lineHeight = "2";
-          for (const part of getParaParts3P(gender)) {
-            if (part.text !== undefined) {
-              paraEl.appendChild(document.createTextNode(part.text));
-            } else if (part.qid === null) {
-              const s = document.createElement("strong");
-              s.textContent = intv.interviewee_character_name || "[NAME]";
-              paraEl.appendChild(s);
-            } else if (gapQids.has(part.qid)) {
-              const val = getAnswerForParagraph3P(part.qid, recordedMap[part.qid] || "", gender);
-              const s = document.createElement("strong");
-              s.style.color = "#1565c0";
-              s.textContent = val;
-              paraEl.appendChild(s);
-            } else {
-              const span = document.createElement("span");
-              span.style.color = "#bbb";
-              span.textContent = `[${part.label}]`;
-              paraEl.appendChild(span);
+          const answerPeek = document.createElement("div");
+          answerPeek.style.cssText = "display:none;margin:6px 0 4px;font-size:15px;font-weight:600;color:#1565c0;";
+          answerPeek.textContent = answers.join(" · ");
+
+          let peekTimeout = null;
+          const remindBtn = document.createElement("button");
+          remindBtn.textContent = "Remind me";
+          remindBtn.style.cssText = "margin-top:6px;font-size:13px;padding:4px 12px;";
+          remindBtn.addEventListener("click", async () => {
+            const token = localStorage.getItem("playerToken");
+            if (token) {
+              fetch(`${API}/me/remind`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` },
+              }).catch(() => {});
             }
-          }
-          div.appendChild(paraEl);
+            answerPeek.style.display = "block";
+            if (peekTimeout) clearTimeout(peekTimeout);
+            peekTimeout = setTimeout(() => { answerPeek.style.display = "none"; }, 3000);
+          });
+
+          div.appendChild(remindBtn);
+          div.appendChild(answerPeek);
 
           container.appendChild(div);
         });

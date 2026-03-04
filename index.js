@@ -25,6 +25,9 @@ const pool = new Pool({
 });
 
 
+// kill-code broadcast store: gameId → { kill_code, seq, until, target_player_id }
+const killBroadcasts = new Map();
+
 const POD_SPLITS = {
   3: [3],
   4: [4],
@@ -1390,8 +1393,44 @@ app.get('/me/current-state', async (req, res) => {
     eligibleTargets,
     myInterviews,
     eliminationEvent,
+    killCodeToast: (() => {
+      const bc = killBroadcasts.get(game.id);
+      return (bc && bc.until > Date.now() && bc.target_player_id === player.id)
+        ? { kill_code: bc.kill_code, seq: bc.seq }
+        : null;
+    })(),
     // later you’ll add: phase transitions, voting, etc.
   });
+});
+
+// "Remind me" — briefly reveals this player's kill code to one random living baddie
+app.post('/me/remind', async (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
+  if (!token) return res.status(401).json({ error: 'Missing token' });
+
+  const player = await getPlayerByToken(token);
+  if (!player || !player.is_alive) return res.status(403).json({ error: 'Not allowed' });
+
+  // Find all living baddies in the same game (excluding this player)
+  const baddiesRes = await pool.query(
+    `SELECT id FROM game_players
+     WHERE game_id = $1 AND role = 'baddie' AND is_alive = TRUE AND id != $2`,
+    [player.game_id, player.id]
+  );
+
+  if (baddiesRes.rows.length > 0) {
+    const target = baddiesRes.rows[Math.floor(Math.random() * baddiesRes.rows.length)];
+    const prev = killBroadcasts.get(player.game_id);
+    killBroadcasts.set(player.game_id, {
+      kill_code: player.kill_code,
+      seq: (prev ? prev.seq : 0) + 1,
+      until: Date.now() + 5000,
+      target_player_id: target.id,
+    });
+  }
+
+  res.json({ ok: true });
 });
 
 // record an interview: who you talked to and what they said
@@ -1517,7 +1556,6 @@ app.post('/rounds/:roundId/interviews', async (req, res) => {
              FROM game_players
              WHERE game_id = $1
                AND is_alive = TRUE
-               AND role = 'goodie'
                AND kill_code = $2
              LIMIT 1`,
             [player.game_id, killToken]

@@ -569,6 +569,9 @@
           <div class="sub">
             Game code: <strong><span id="waitingGameCode"></span></strong>
           </div>
+          <div class="sub hidden" id="waitingGroupLabel">
+            Group: <strong><span id="waitingGroupName"></span></strong>
+          </div>
           <div class="spinner" aria-label="Loading"></div>
         </div>
 
@@ -1268,6 +1271,18 @@
 
         if (codeEl && state && state.game && state.game.code) {
           codeEl.textContent = state.game.code;
+        }
+
+        const groupLabelEl = document.getElementById("waitingGroupLabel");
+        const groupNameEl = document.getElementById("waitingGroupName");
+        if (groupLabelEl && groupNameEl) {
+          const label = state && state.game && state.game.split_label;
+          if (label) {
+            groupNameEl.textContent = label;
+            groupLabelEl.classList.remove("hidden");
+          } else {
+            groupLabelEl.classList.add("hidden");
+          }
         }
 
         if (!inProgress && !isFinished) {
@@ -2205,24 +2220,26 @@
           answerPeek.style.cssText = "display:none;margin:6px 0 4px;font-size:15px;font-weight:600;color:#1565c0;";
           answerPeek.textContent = answers.join(" · ");
 
-          let peekTimeout = null;
-          const remindBtn = document.createElement("button");
-          remindBtn.textContent = "Remind me";
-          remindBtn.style.cssText = "margin-top:6px;font-size:13px;padding:4px 12px;";
-          remindBtn.addEventListener("click", async () => {
-            const token = localStorage.getItem("truthseekers-token");
-            if (token) {
-              fetch(`${API}/me/remind`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${token}` },
-              }).catch(() => {});
-            }
-            answerPeek.style.display = "block";
-            if (peekTimeout) clearTimeout(peekTimeout);
-            peekTimeout = setTimeout(() => { answerPeek.style.display = "none"; }, 3000);
-          });
+          if (state.game && state.game.remind_enabled) {
+            let peekTimeout = null;
+            const remindBtn = document.createElement("button");
+            remindBtn.textContent = "Remind me";
+            remindBtn.style.cssText = "margin-top:6px;font-size:13px;padding:4px 12px;";
+            remindBtn.addEventListener("click", async () => {
+              const token = localStorage.getItem("truthseekers-token");
+              if (token) {
+                fetch(`${API}/me/remind`, {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${token}` },
+                }).catch(() => {});
+              }
+              answerPeek.style.display = "block";
+              if (peekTimeout) clearTimeout(peekTimeout);
+              peekTimeout = setTimeout(() => { answerPeek.style.display = "none"; }, 3000);
+            });
+            div.appendChild(remindBtn);
+          }
 
-          div.appendChild(remindBtn);
           div.appendChild(answerPeek);
 
           container.appendChild(div);

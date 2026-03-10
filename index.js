@@ -28,6 +28,12 @@ const pool = new Pool({
 // kill-code broadcast store: gameId → { kill_code, seq, until, target_player_id }
 const killBroadcasts = new Map();
 
+// update sequence: gameId → seq (incremented in-memory whenever anything changes)
+const gameUpdateSeqs = new Map();
+function bumpGameSeq(gameId) {
+  gameUpdateSeqs.set(gameId, (gameUpdateSeqs.get(gameId) || 0) + 1);
+}
+
 const POD_SPLITS = {
   3: [3],
   4: [4],
@@ -212,12 +218,15 @@ async function createPodsAndAssignmentsForRound(gameId, roundId) {
 
   // 4) Persist pods and members to DB
   const podLabels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const gameRow = await pool.query('SELECT split_label FROM games WHERE id = $1', [gameId]);
+  const splitPrefix = gameRow.rows[0]?.split_label ? gameRow.rows[0].split_label : '';
   const finalPods = [];
   for (let podIdx = 0; podIdx < podsInfo.length; podIdx++) {
     const pod = podsInfo[podIdx];
     if (!pod.memberIds.length) continue;
 
-    const label = `Pod ${podLabels[podIdx] || String(podIdx + 1)}`;
+    const podLetter = podLabels[podIdx] || String(podIdx + 1);
+    const label = splitPrefix ? `Pod ${splitPrefix}${podLetter}` : `Pod ${podLetter}`;
     const podRes = await pool.query(
       'INSERT INTO pods (game_id, round_id, label) VALUES ($1, $2, $3) RETURNING id',
       [gameId, roundId, label]
@@ -514,11 +523,10 @@ async function createFirstRoundWithMutations(gameId) {
     [round.round_number, gameId]
   );
 
-  // pick 3 random questions for this round (IDs 1–12 only)
-  const qRes = await pool.query(
-    'SELECT id FROM questions WHERE id BETWEEN 1 AND 12 ORDER BY random() LIMIT 3'
-  );
-  const selectedQuestions = qRes.rows; // [{id: ...}, ...]
+  // Round 1: fixed question Q10 (job)
+  const selectedQuestions = (await pool.query(
+    'SELECT id FROM questions WHERE id = 10'
+  )).rows;
 
   for (let i = 0; i < selectedQuestions.length; i++) {
     await pool.query(
@@ -528,7 +536,7 @@ async function createFirstRoundWithMutations(gameId) {
     );
   }
 
-  // restrict baddie mutations to this round's 3 questions
+  // restrict baddie mutations to this round's questions
   const rqRes = await pool.query(
     `SELECT q.id
      FROM round_questions rq
@@ -593,17 +601,24 @@ async function createNextRoundWithMutations(gameId) {
   );
   const round = roundRes.rows[0];
 
-  // update game record
+  // update game record; reset remind_enabled at each new round
   await pool.query(
-    'UPDATE games SET current_round = $1, current_subround = 1 WHERE id = $2',
+    'UPDATE games SET current_round = $1, current_subround = 1, remind_enabled = FALSE WHERE id = $2',
     [round.round_number, gameId]
   );
 
-  // pick 3 random questions for this round (IDs 1–12 only)
-  const qRes = await pool.query(
-    'SELECT id FROM questions WHERE id BETWEEN 1 AND 12 ORDER BY random() LIMIT 3'
-  );
-  const selectedQuestions = qRes.rows;
+  // Round 2: fixed questions Q6 (wake time) + Q2 (hometown)
+  // Round 3+: 3 random questions from Q1–Q12
+  let selectedQuestions;
+  if (nextRoundNum === 2) {
+    selectedQuestions = (await pool.query(
+      'SELECT id FROM questions WHERE id IN (6, 2) ORDER BY id'
+    )).rows;
+  } else {
+    selectedQuestions = (await pool.query(
+      'SELECT id FROM questions WHERE id BETWEEN 1 AND 12 ORDER BY random() LIMIT 3'
+    )).rows;
+  }
 
   for (let i = 0; i < selectedQuestions.length; i++) {
     await pool.query(
@@ -613,7 +628,7 @@ async function createNextRoundWithMutations(gameId) {
     );
   }
 
-  // restrict baddie mutations to this round's 3 questions
+  // restrict baddie mutations to this round's questions
   const rqRes = await pool.query(
     `SELECT q.id
      FROM round_questions rq
@@ -710,6 +725,80 @@ async function checkAndFinalizeGameIfNeeded(gameId) {
 }
 
 // ---------- ROUTES ----------
+
+// ── Subgame splitting helpers ────────────────────────────────────────────────
+
+// Returns null if no split needed (≤14 players).
+// Otherwise returns an array of group sizes, e.g. [12, 13] or [9, 9, 9].
+function computeSubgameSizes(n) {
+  if (n <= 14) return null;
+  const k = n >= 25 ? 3 : 2;
+  const base = Math.floor(n / k);
+  const remainder = n % k;
+  return Array.from({ length: k }, (_, i) => base + (i < remainder ? 1 : 0));
+}
+
+// Core game-start logic shared by /start and /start-split.
+async function startSingleGame(gameId) {
+  const playersRes = await pool.query(
+    'SELECT id FROM game_players WHERE game_id = $1',
+    [gameId]
+  );
+  const players = playersRes.rows;
+  const numPlayers = players.length;
+
+  let numBaddies;
+  if (numPlayers <= 8) numBaddies = 2;
+  else if (numPlayers <= 10) numBaddies = 3;
+  else if (numPlayers <= 13) numBaddies = 4;
+  else if (numPlayers <= 16) numBaddies = 5;
+  else numBaddies = 6;
+
+  const shuffled = [...players].sort(() => Math.random() - 0.5);
+  const baddieIds = shuffled.slice(0, numBaddies).map(p => p.id);
+  const goodieIds = shuffled.slice(numBaddies).map(p => p.id);
+
+  if (baddieIds.length) {
+    await pool.query('UPDATE game_players SET role = $1 WHERE id = ANY($2)', ['baddie', baddieIds]);
+  }
+  if (goodieIds.length) {
+    await pool.query('UPDATE game_players SET role = $1 WHERE id = ANY($2)', ['goodie', goodieIds]);
+  }
+
+  const codeSet = new Set();
+  const existingCodesRes = await pool.query(
+    'SELECT kill_code FROM game_players WHERE game_id = $1 AND kill_code IS NOT NULL',
+    [gameId]
+  );
+  existingCodesRes.rows.forEach(r => { if (r.kill_code) codeSet.add(String(r.kill_code).toUpperCase()); });
+
+  const playersWithCodesRes = await pool.query(
+    'SELECT id, kill_code FROM game_players WHERE game_id = $1 ORDER BY id',
+    [gameId]
+  );
+  for (const p of playersWithCodesRes.rows) {
+    if (p.kill_code) continue;
+    let kc = null;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const candidate = generateKillCode();
+      if (!codeSet.has(candidate)) { kc = candidate; codeSet.add(candidate); break; }
+    }
+    if (!kc) throw new Error('Failed to create unique kill code');
+    await pool.query(
+      'UPDATE game_players SET kill_code = $1 WHERE id = $2 AND game_id = $3',
+      [kc, p.id, gameId]
+    );
+  }
+
+  await pool.query('UPDATE game_players SET kill_used_round_id = NULL WHERE game_id = $1', [gameId]);
+  await assignCharactersAndProfiles(gameId);
+  await createFirstRoundWithMutations(gameId);
+  await pool.query("UPDATE games SET status = 'in_progress', phase = 'rally' WHERE id = $1", [gameId]);
+
+  return { numPlayers, numBaddies };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // health check
 app.get('/health', (req, res) => {
@@ -812,7 +901,8 @@ app.get('/games/:code', async (req, res) => {
 app.get('/games', async (req, res) => {
   try {
     const gamesRes = await pool.query(
-      `SELECT id, code, status, current_round, current_subround, phase, created_at
+      `SELECT id, code, status, current_round, current_subround, phase, created_at,
+              parent_game_id, split_label
        FROM games
        ORDER BY created_at DESC`
     );
@@ -940,115 +1030,88 @@ app.delete('/games/:id', async (req, res) => {
 app.post('/games/:id/start', async (req, res) => {
   const gameId = Number(req.params.id);
 
-  // get game
   const gameRes = await pool.query('SELECT * FROM games WHERE id = $1', [gameId]);
   const game = gameRes.rows[0];
-  if (!game) {
-    return res.status(404).json({ error: 'Game not found' });
-  }
-  if (game.status !== 'lobby') {
-    return res.status(400).json({ error: 'Game already started or finished' });
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+  if (game.status !== 'lobby') return res.status(400).json({ error: 'Game already started or finished' });
+
+  const playersRes = await pool.query('SELECT id FROM game_players WHERE game_id = $1', [gameId]);
+  const numPlayers = playersRes.rows.length;
+
+  if (numPlayers < 3) return res.status(400).json({ error: 'Need at least 3 players to start' });
+
+  // If >14 players, return a split preview instead of starting
+  const subgameSizes = computeSubgameSizes(numPlayers);
+  if (subgameSizes) {
+    return res.json({
+      needs_split_confirmation: true,
+      parent_game_id: gameId,
+      subgame_sizes: subgameSizes,
+    });
   }
 
-  // get players
-  const playersRes = await pool.query(
-    'SELECT id FROM game_players WHERE game_id = $1',
-    [gameId]
-  );
+  const { numBaddies } = await startSingleGame(gameId);
+  res.json({ game: { id: game.id, code: game.code, status: 'in_progress' }, numPlayers, numBaddies });
+});
+
+// Split a large lobby into independent subgames and start each one
+app.post('/games/:id/start-split', async (req, res) => {
+  const gameId = Number(req.params.id);
+
+  const gameRes = await pool.query('SELECT * FROM games WHERE id = $1', [gameId]);
+  const game = gameRes.rows[0];
+  if (!game) return res.status(404).json({ error: 'Game not found' });
+  if (game.status !== 'lobby') return res.status(400).json({ error: 'Game not in lobby' });
+
+  const playersRes = await pool.query('SELECT id FROM game_players WHERE game_id = $1', [gameId]);
   const players = playersRes.rows;
-  const numPlayers = players.length;
+  const subgameSizes = computeSubgameSizes(players.length);
+  if (!subgameSizes) return res.status(400).json({ error: 'Not enough players to split' });
 
-  if (numPlayers < 3) {
-    return res.status(400).json({ error: 'Need at least 3 players to start' });
+  const shuffled = shuffleArray(players);
+  const LABELS = ['A', 'B', 'C'];
+  const groups = [];
+  let offset = 0;
+  for (let i = 0; i < subgameSizes.length; i++) {
+    groups.push({ label: LABELS[i], players: shuffled.slice(offset, offset + subgameSizes[i]) });
+    offset += subgameSizes[i];
   }
 
-  // decide number of baddies (simple rule for now)
-  let numBaddies;
-  if (numPlayers <= 8) numBaddies = 2;
-  else if (numPlayers <= 10) numBaddies = 3;
-  else if (numPlayers <= 13) numBaddies = 4;
-  else if (numPlayers <= 16) numBaddies = 5;
-  else numBaddies = 6;
-
-  // shuffle players array
-  const shuffled = [...players].sort(() => Math.random() - 0.5);
-  const baddieIds = shuffled.slice(0, numBaddies).map(p => p.id);
-  const goodieIds = shuffled.slice(numBaddies).map(p => p.id);
-
-  // set roles in DB
-  if (baddieIds.length) {
-    await pool.query(
-      'UPDATE game_players SET role = $1 WHERE id = ANY($2)',
-      ['baddie', baddieIds]
-    );
-  }
-  if (goodieIds.length) {
-    await pool.query(
-      'UPDATE game_players SET role = $1 WHERE id = ANY($2)',
-      ['goodie', goodieIds]
-    );
-  }
-
-  // Assign a private kill code to each player (letters only). Used later by baddies.
-  // Ensure uniqueness within the game.
-  const codeSet = new Set();
-  const existingCodesRes = await pool.query(
-    'SELECT kill_code FROM game_players WHERE game_id = $1 AND kill_code IS NOT NULL',
-    [gameId]
-  );
-  existingCodesRes.rows.forEach(r => { if (r.kill_code) codeSet.add(String(r.kill_code).toUpperCase()); });
-
-  const playersWithCodesRes = await pool.query(
-    'SELECT id, kill_code FROM game_players WHERE game_id = $1 ORDER BY id',
-    [gameId]
-  );
-
-  for (const p of playersWithCodesRes.rows) {
-    if (p.kill_code) continue;
-    let kc = null;
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const candidate = generateKillCode();
-      if (!codeSet.has(candidate)) {
-        kc = candidate;
-        codeSet.add(candidate);
-        break;
-      }
+  // Create subgame rows and move players atomically
+  const client = await pool.connect();
+  const subgameRecords = [];
+  try {
+    await client.query('BEGIN');
+    for (const group of groups) {
+      const code = generateLetterCode(6);
+      const sgRes = await client.query(
+        `INSERT INTO games (code, status, parent_game_id, split_label)
+         VALUES ($1, 'lobby', $2, $3) RETURNING id, code`,
+        [code, gameId, group.label]
+      );
+      const sg = sgRes.rows[0];
+      subgameRecords.push({ id: sg.id, code: sg.code, split_label: group.label, num_players: group.players.length });
+      await client.query(
+        'UPDATE game_players SET game_id = $1 WHERE id = ANY($2)',
+        [sg.id, group.players.map(p => p.id)]
+      );
     }
-    if (!kc) {
-      throw new Error('Failed to create unique kill code');
-    }
-    await pool.query(
-      'UPDATE game_players SET kill_code = $1 WHERE id = $2 AND game_id = $3',
-      [kc, p.id, gameId]
-    );
+    await client.query("UPDATE games SET status = 'split' WHERE id = $1", [gameId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    client.release();
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to split game', detail: err.message });
+  }
+  client.release();
+
+  // Start each subgame independently (outside transaction)
+  for (const sg of subgameRecords) {
+    await startSingleGame(sg.id);
   }
 
-  // Reset per-round kill usage tracking at game start
-  await pool.query(
-    'UPDATE game_players SET kill_used_round_id = NULL WHERE game_id = $1',
-    [gameId]
-  );
-
-  // set up questions, player profiles, and first round with baddie mutations
-  await assignCharactersAndProfiles(gameId);
-  await createFirstRoundWithMutations(gameId);
-
-  // update game status and initial phase
-  await pool.query(
-    'UPDATE games SET status = $1, phase = $2 WHERE id = $3',
-    ['in_progress', 'rally', gameId]
-  );
-
-  // return summary
-  res.json({
-    game: {
-      id: game.id,
-      code: game.code,
-      status: 'in_progress',
-    },
-    numPlayers,
-    numBaddies,
-  });
+  res.json({ subgames: subgameRecords });
 });
 
 // /me/current-state (restore seat after reload)
@@ -1395,6 +1458,8 @@ app.get('/me/current-state', async (req, res) => {
       status: game.status,
       winning_side: game.winning_side || null,
       current_round: game.current_round,
+      remind_enabled: game.remind_enabled || false,
+      split_label: game.split_label || null,
     },
     currentRound,
     currentSubround,
@@ -1416,6 +1481,16 @@ app.get('/me/current-state', async (req, res) => {
   });
 });
 
+// Toggle remind_enabled for a game
+app.post('/games/:id/remind-toggle', async (req, res) => {
+  const gameId = Number(req.params.id);
+  const gameRes = await pool.query('SELECT remind_enabled FROM games WHERE id = $1', [gameId]);
+  if (!gameRes.rows.length) return res.status(404).json({ error: 'Game not found' });
+  const newVal = !gameRes.rows[0].remind_enabled;
+  await pool.query('UPDATE games SET remind_enabled = $1 WHERE id = $2', [newVal, gameId]);
+  res.json({ remind_enabled: newVal });
+});
+
 // "Remind me" — briefly reveals this player's kill code to one random living baddie
 app.post('/me/remind', async (req, res) => {
   const authHeader = req.headers.authorization || '';
@@ -1424,6 +1499,12 @@ app.post('/me/remind', async (req, res) => {
 
   const player = await getPlayerByToken(token);
   if (!player || !player.is_alive) return res.status(403).json({ error: 'Not allowed' });
+
+  // Check that remind is enabled for this game
+  const gameRes = await pool.query('SELECT remind_enabled FROM games WHERE id = $1', [player.game_id]);
+  if (!gameRes.rows.length || !gameRes.rows[0].remind_enabled) {
+    return res.status(403).json({ error: 'Remind Me is not enabled' });
+  }
 
   // Find all living baddies in the same game (excluding this player)
   const baddiesRes = await pool.query(
@@ -1615,6 +1696,7 @@ app.post('/rounds/:roundId/interviews', async (req, res) => {
     }
   }
 
+  bumpGameSeq(player.game_id);
   res.json({ ok: true, interview_id: interview.id, kill: killResult });
 });
 
@@ -1694,6 +1776,7 @@ app.post('/rounds/:roundId/vote', async (req, res) => {
     [roundId, voter.id, target_player_id]
   );
 
+  bumpGameSeq(voter.game_id);
   res.json({ ok: true });
 });
 
@@ -1717,6 +1800,7 @@ app.post('/games/:id/subround', async (req, res) => {
     [subround, gameId]
   );
 
+  bumpGameSeq(gameId);
   res.json({ ok: true, game_id: gameId, current_subround: subround });
 });
 // teacher: force-reset all player devices (clients clear localStorage when seq increases)
@@ -1793,6 +1877,7 @@ app.post('/games/:id/next-round', async (req, res) => {
       current_subround: g2.current_subround,
       phase: g2.phase,
     });
+    bumpGameSeq(gameId);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create next round' });
@@ -2099,6 +2184,12 @@ app.post('/games/:gameId/players/:playerId/ghost', async (req, res) => {
   }
 });
 
+// lightweight poll: returns current update seq for a game (no DB query)
+app.get('/games/:id/update-seq', (req, res) => {
+  const gameId = Number(req.params.id);
+  res.json({ seq: gameUpdateSeqs.get(gameId) || 0 });
+});
+
 // teacher debug: full game view with pods, assignments, and players
 app.get('/games/:id/debug', async (req, res) => {
   const gameId = Number(req.params.id);
@@ -2309,10 +2400,11 @@ app.listen(PORT, () => {
 app.post('/pods/:podId/feedback', async (req, res) => {
   const podId = Number(req.params.podId);
   const result = await pool.query(
-    'UPDATE pods SET feedback_ready = TRUE WHERE id = $1 RETURNING id, label',
+    'UPDATE pods SET feedback_ready = TRUE WHERE id = $1 RETURNING id, label, game_id',
     [podId]
   );
   if (!result.rows.length) return res.status(404).json({ error: 'Pod not found' });
+  bumpGameSeq(result.rows[0].game_id);
   res.json({ ok: true, pod: result.rows[0] });
 });
 
@@ -2324,10 +2416,11 @@ app.post('/pods/:podId/subround', async (req, res) => {
   if (!sr || sr < 1 || sr > 2) return res.status(400).json({ error: 'Invalid subround' });
 
   const result = await pool.query(
-    'UPDATE pods SET current_subround = $1 WHERE id = $2 RETURNING id, label, current_subround',
+    'UPDATE pods SET current_subround = $1 WHERE id = $2 RETURNING id, label, current_subround, game_id',
     [sr, podId]
   );
   if (!result.rows.length) return res.status(404).json({ error: 'Pod not found' });
+  bumpGameSeq(result.rows[0].game_id);
   res.json({ ok: true, pod: result.rows[0] });
 });
 
@@ -2390,6 +2483,7 @@ app.post('/games/:id/phase', async (req, res) => {
       }
     }
 
+    bumpGameSeq(gameId);
     res.json({ ok: true, game_id: gameId, phase });
   } catch (err) {
     console.error(err);

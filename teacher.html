@@ -384,6 +384,7 @@
         </button>
         <button class="secondary" onclick="setPhase('voting')">Voting</button>
         <button class="secondary" onclick="nextRound()">Next Round</button>
+        <button class="secondary" id="remindToggleBtn" onclick="toggleRemind()">Remind Me: OFF</button>
         <button class="secondary" id="toggleRolesBtn" onclick="toggleRoles()">
           Show roles
         </button>
@@ -434,6 +435,8 @@
       let eliminationTimeoutId = null;
       let showRoles = false;
       let lastSeenFinishedForGame = {};
+      let lastKnownSeq = null;
+      let seqPollInterval = null;
       let playerSortMode = "name"; // 'name' | 'pod'
 
       // --- shared helpers (reduce duplicate fetch/error handling) ---
@@ -499,15 +502,20 @@
 
           gamesListDiv.innerHTML = "";
           games.forEach((game) => {
+            // Hide the lobby-that-was-split (it's just a container now)
+            if (game.status === "split") return;
+
             const div = document.createElement("div");
             div.className = "game-card";
+            if (game.split_label) div.style.marginLeft = "20px";
 
             const header = document.createElement("div");
             header.className = "game-header";
 
+            const label = game.split_label ? ` – Group ${game.split_label}` : "";
             const left = document.createElement("div");
             left.innerHTML = `
-          <div><strong>Game ${game.id}</strong> – Code: <code>${
+          <div><strong>Game ${game.id}${label}</strong> – Code: <code>${
             game.code
           }</code></div>
           <div class="game-meta">
@@ -527,6 +535,8 @@
             startBtn.className = "secondary";
             startBtn.textContent = "Start Game";
             startBtn.onclick = () => startGame(game.id);
+            // subgames are started automatically; hide the button for them
+            if (game.split_label) startBtn.style.display = "none";
 
             right.appendChild(debugBtn);
             right.appendChild(startBtn);
@@ -587,16 +597,28 @@
       }
 
       async function startGame(gameId) {
-        if (
-          !confirm(
-            "Start game " +
-              gameId +
-              "? This will assign roles and start round 1.",
-          )
-        )
+        if (!confirm("Start game " + gameId + "? This will assign roles and start round 1."))
           return;
         try {
-          await apiFetch(`/games/${gameId}/start`, { method: "POST" });
+          const data = await apiFetch(`/games/${gameId}/start`, { method: "POST" });
+
+          // Large lobby: server wants a split confirmation before committing
+          if (data.needs_split_confirmation) {
+            const sizes = data.subgame_sizes;
+            const sizeStr = sizes.join(" and ");
+            if (!confirm(
+              `This game has ${sizes.reduce((a, b) => a + b, 0)} players.\n\n` +
+              `Split into ${sizes.length} subgames of ${sizeStr} players — OK?`
+            )) return;
+
+            const splitData = await apiFetch(`/games/${gameId}/start-split`, { method: "POST" });
+            await loadGames();
+            if (splitData.subgames && splitData.subgames.length > 0) {
+              await openDebug(splitData.subgames[0].id);
+            }
+            return;
+          }
+
           await loadGames();
           await openDebug(gameId);
         } catch (err) {
@@ -607,8 +629,26 @@
 
       async function openDebug(gameId) {
         currentGameId = gameId;
+        lastKnownSeq = null;
         document.getElementById("debugView").style.display = "block";
         await refreshDebug();
+        startSeqPolling();
+      }
+
+      function startSeqPolling() {
+        if (seqPollInterval) clearInterval(seqPollInterval);
+        seqPollInterval = setInterval(async () => {
+          if (!currentGameId) return;
+          try {
+            const res = await fetch(API + `/games/${currentGameId}/update-seq`);
+            if (!res.ok) return;
+            const { seq } = await res.json();
+            if (lastKnownSeq !== null && seq !== lastKnownSeq) {
+              await refreshDebug();
+            }
+            lastKnownSeq = seq;
+          } catch (_) {}
+        }, 3000);
       }
 
       async function refreshDebug() {
@@ -678,6 +718,18 @@
         } catch (err) {
           console.error(err);
           alert("Error advancing pod to feedback (see console).");
+        }
+      }
+
+      async function toggleRemind() {
+        if (!currentGameId) return;
+        try {
+          const out = await apiFetch(`/games/${currentGameId}/remind-toggle`, { method: "POST" });
+          const btn = document.getElementById("remindToggleBtn");
+          if (btn) btn.textContent = `Remind Me: ${out.remind_enabled ? "ON" : "OFF"}`;
+        } catch (err) {
+          console.error(err);
+          alert("Error toggling Remind Me (see console).");
         }
       }
 
@@ -1054,6 +1106,10 @@
             );
           });
         }
+
+        // Remind Me toggle button state
+        const remindBtn = document.getElementById("remindToggleBtn");
+        if (remindBtn) remindBtn.textContent = `Remind Me: ${g.remind_enabled ? "ON" : "OFF"}`;
 
         // Game info
         const gameInfoDiv = document.getElementById("gameInfo");

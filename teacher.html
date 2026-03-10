@@ -1107,13 +1107,13 @@
           });
         }
 
-        // Remind Me toggle button state
-        const remindBtn = document.getElementById("remindToggleBtn");
-        if (remindBtn) remindBtn.textContent = `Remind Me: ${g.remind_enabled ? "ON" : "OFF"}`;
-
         // Game info
         const gameInfoDiv = document.getElementById("gameInfo");
         const g = data.game;
+
+        // Remind Me toggle button state
+        const remindBtn = document.getElementById("remindToggleBtn");
+        if (remindBtn) remindBtn.textContent = `Remind Me: ${g.remind_enabled ? "ON" : "OFF"}`;
         const roundText = g.current_round || "-";
         const subroundText = g.current_subround || "-";
         const phaseText = data.phase || data.game.phase || g.phase || "-";

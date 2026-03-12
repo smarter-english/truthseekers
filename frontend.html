@@ -2377,10 +2377,15 @@
         const lpd = state && state.listenerPodData;
         if (!lpd) {
           section.classList.add("hidden");
+          section.classList.remove("visible");
+          section.style.display = "none";
           return;
         }
 
         section.classList.remove("hidden");
+        section.style.display = "block";
+        void section.offsetWidth;
+        section.classList.add("visible");
 
         // Pre-populate choices from existing responses
         (lpd.existing_responses || []).forEach(r => {

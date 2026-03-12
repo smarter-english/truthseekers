@@ -601,23 +601,6 @@
         try {
           const data = await apiFetch(`/games/${gameId}/start`, { method: "POST" });
 
-          // Large lobby: server wants a split confirmation before committing
-          if (data.needs_split_confirmation) {
-            const sizes = data.subgame_sizes;
-            const sizeStr = sizes.join(" and ");
-            if (!confirm(
-              `This game has ${sizes.reduce((a, b) => a + b, 0)} players.\n\n` +
-              `Split into ${sizes.length} subgames of ${sizeStr} players — OK?`
-            )) return;
-
-            const splitData = await apiFetch(`/games/${gameId}/start-split`, { method: "POST" });
-            await loadGames();
-            if (splitData.subgames && splitData.subgames.length > 0) {
-              await openDebug(splitData.subgames[0].id);
-            }
-            return;
-          }
-
           await loadGames();
           await openDebug(gameId);
         } catch (err) {

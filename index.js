@@ -1101,16 +1101,6 @@ app.post('/games/:id/start', async (req, res) => {
 
   if (numPlayers < 3) return res.status(400).json({ error: 'Need at least 3 players to start' });
 
-  // If >14 players, return a split preview instead of starting
-  const subgameSizes = computeSubgameSizes(numPlayers);
-  if (subgameSizes) {
-    return res.json({
-      needs_split_confirmation: true,
-      parent_game_id: gameId,
-      subgame_sizes: subgameSizes,
-    });
-  }
-
   const { numBaddies } = await startSingleGame(gameId);
   res.json({ game: { id: game.id, code: game.code, status: 'in_progress' }, numPlayers, numBaddies });
 });

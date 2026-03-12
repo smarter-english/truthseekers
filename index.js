@@ -1024,10 +1024,24 @@ app.delete('/games/:id', async (req, res) => {
 
     // Pod-scoped data
     await client.query(
+      `DELETE FROM feedback_responses fr
+       USING pods p
+       WHERE fr.pod_id = p.id
+         AND p.game_id = $1`,
+      [gameId]
+    );
+
+    await client.query(
       `DELETE FROM pod_members pm
        USING pods p
        WHERE pm.pod_id = p.id
          AND p.game_id = $1`,
+      [gameId]
+    );
+
+    // Clear listener_of_pod_id FK before deleting pods
+    await client.query(
+      `UPDATE game_players SET listener_of_pod_id = NULL WHERE game_id = $1`,
       [gameId]
     );
 

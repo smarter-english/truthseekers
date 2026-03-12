@@ -1365,7 +1365,7 @@
               pod.members.forEach((m) => {
                 const mLabel = playerLabelById[m.id] || m.display_name;
                 const listenerId = `listener-select-${m.id}`;
-                html += `<span style="margin-right:8px;">${mLabel}: <select id="${listenerId}" style="font-size:11px;">${otherPodOptions}</select> <button class="secondary" style="font-size:11px;padding:2px 6px;" onclick="assignListenerFromSelect(${m.id},${JSON.stringify(mLabel)}, '${listenerId}')">Assign Listener</button></span>`;
+                html += `<span style="margin-right:8px;">${mLabel}: <select id="${listenerId}" style="font-size:11px;">${otherPodOptions}</select> <button class="secondary" style="font-size:11px;padding:2px 6px;" onclick='assignListenerFromSelect(${m.id},${JSON.stringify(mLabel)},"${listenerId}")'>Assign Listener</button></span>`;
               });
               html += '</div>';
             }

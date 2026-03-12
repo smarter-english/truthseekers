@@ -2528,7 +2528,7 @@ app.post('/feedback-responses', async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (pod_id, round_id, interviewee_player_id, question_id)
          DO UPDATE SET agree = EXCLUDED.agree, submitted_by_player_id = EXCLUDED.submitted_by_player_id`,
-        [pod_id, round_id, interviewee_player_id, question_id, agree, player.id]
+        [pod_id, round_id, interviewee_player_id, question_id, agree, player ? player.id : null]
       );
     }
 

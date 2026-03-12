@@ -99,9 +99,9 @@ function generateKillCode() {
 }
 
 async function createPodsAndAssignmentsForRound(gameId, roundId) {
-  // get all players (alive + ghosts)
+  // get all players (alive + ghosts), including star flag
   const playersRes = await pool.query(
-    'SELECT id, display_name, is_alive, role FROM game_players WHERE game_id = $1 ORDER BY id',
+    'SELECT id, display_name, is_alive, role, COALESCE(is_star, FALSE) AS is_star FROM game_players WHERE game_id = $1 ORDER BY id',
     [gameId]
   );
   const allPlayers = playersRes.rows;
@@ -136,9 +136,13 @@ async function createPodsAndAssignmentsForRound(gameId, roundId) {
   const byId = {};
   shuffled.forEach(p => { byId[p.id] = p; });
 
-  // Split alive players by role (we only pair alive baddies)
-  const liveBaddies = shuffled.filter(p => p.is_alive && p.role === 'baddie');
-  const liveGoodies = shuffled.filter(p => p.is_alive && p.role !== 'baddie');
+  // Identify star players (alive stars go into demo pod 0)
+  const starPlayerIds = new Set(shuffled.filter(p => p.is_alive && p.is_star).map(p => p.id));
+  const hasDemoPod = starPlayerIds.size > 0;
+
+  // Split alive players by role, excluding stars from baddie/goodie pools
+  const liveBaddies = shuffled.filter(p => p.is_alive && p.role === 'baddie' && !starPlayerIds.has(p.id));
+  const liveGoodies = shuffled.filter(p => p.is_alive && p.role !== 'baddie' && !starPlayerIds.has(p.id));
 
   // Helper: count live players currently in a pod
   function liveCount(podInfo) {
@@ -170,18 +174,29 @@ async function createPodsAndAssignmentsForRound(gameId, roundId) {
   // 1) Initialize empty pods
   const podsInfo = [];
   for (let i = 0; i < podCount; i++) {
-    podsInfo.push({ memberIds: [] });
+    podsInfo.push({ memberIds: [], isDemo: false });
+  }
+
+  // 1b) Seed star players into pod 0 (demo pod) if any exist
+  if (hasDemoPod) {
+    podsInfo[0].isDemo = true;
+    for (const p of shuffled.filter(pl => starPlayerIds.has(pl.id))) {
+      podsInfo[0].memberIds.push(p.id);
+    }
   }
 
   // 2) Seed baddie pairs into pods to guarantee (where possible) a baddie↔baddie interview in subround 1.
+  // Skip demo pod (index 0) when placing non-star baddies.
   // For pod sizes 4/6/7, indices (0,1) interview each other in subround 1.
   // We place a pair into the first pods so they land at indices 0 and 1.
-  const pairCount = Math.min(Math.floor(liveBaddies.length / 2), podCount);
+  const startPodIdx = hasDemoPod ? 1 : 0;
+  const availablePodCount = podCount - startPodIdx;
+  const pairCount = Math.min(Math.floor(liveBaddies.length / 2), availablePodCount);
   for (let i = 0; i < pairCount; i++) {
     const b1 = liveBaddies.shift();
     const b2 = liveBaddies.shift();
-    if (b1) podsInfo[i].memberIds.push(b1.id);
-    if (b2) podsInfo[i].memberIds.push(b2.id);
+    if (b1) podsInfo[startPodIdx + i].memberIds.push(b1.id);
+    if (b2) podsInfo[startPodIdx + i].memberIds.push(b2.id);
   }
 
   // 3) Ensure at least 2 live players per pod (where possible), filling with remaining live players.
@@ -227,9 +242,10 @@ async function createPodsAndAssignmentsForRound(gameId, roundId) {
 
     const podLetter = podLabels[podIdx] || String(podIdx + 1);
     const label = splitPrefix ? `Pod ${splitPrefix}${podLetter}` : `Pod ${podLetter}`;
+    const isDemo = !!pod.isDemo;
     const podRes = await pool.query(
-      'INSERT INTO pods (game_id, round_id, label) VALUES ($1, $2, $3) RETURNING id',
-      [gameId, roundId, label]
+      'INSERT INTO pods (game_id, round_id, label, is_demo_pod) VALUES ($1, $2, $3, $4) RETURNING id',
+      [gameId, roundId, label, isDemo]
     );
     const podId = podRes.rows[0].id;
 
@@ -605,6 +621,12 @@ async function createNextRoundWithMutations(gameId) {
   await pool.query(
     'UPDATE games SET current_round = $1, current_subround = 1 WHERE id = $2',
     [round.round_number, gameId]
+  );
+
+  // Reset voting rights for all players at start of new round
+  await pool.query(
+    'UPDATE game_players SET can_vote = TRUE, strikes = 0 WHERE game_id = $1',
+    [gameId]
   );
 
   // Round 2: fixed questions Q6 (wake time) + Q2 (hometown)
@@ -1451,6 +1473,53 @@ app.get('/me/current-state', async (req, res) => {
     baddiesReveal = baddiesRes.rows;
   }
 
+  // Listener pod data: if this player is assigned as a listener to another pod
+  let listenerPodData = null;
+  if (player.listener_of_pod_id && currentRound) {
+    const lpRes = await pool.query(
+      `SELECT id, label, is_demo_pod FROM pods WHERE id = $1`,
+      [player.listener_of_pod_id]
+    );
+    if (lpRes.rows.length) {
+      const lp = lpRes.rows[0];
+      // Members of the listener pod
+      const lpMembers = await pool.query(
+        `SELECT gp.id, gp.display_name, c.name AS character_name, c.gender AS character_gender
+         FROM pod_members pm
+         JOIN game_players gp ON gp.id = pm.game_player_id
+         LEFT JOIN characters c ON c.id = gp.character_id
+         WHERE pm.pod_id = $1`,
+        [player.listener_of_pod_id]
+      );
+      // Interview answers recorded by each member (as interviewee) this round
+      const lpAnswers = await pool.query(
+        `SELECT ia2.interviewee_player_id, ia2.question_id, q.text AS question_text, ia2.reported_value
+         FROM interviews i
+         JOIN interview_answers ia2 ON ia2.interview_id = i.id
+         JOIN questions q ON q.id = ia2.question_id
+         WHERE i.round_id = $1
+           AND i.interviewee_player_id IN (
+             SELECT game_player_id FROM pod_members WHERE pod_id = $2
+           )`,
+        [currentRound.id, player.listener_of_pod_id]
+      );
+      // Existing feedback responses for this pod/round
+      const lpFeedback = await pool.query(
+        `SELECT interviewee_player_id, question_id, agree
+         FROM feedback_responses
+         WHERE pod_id = $1 AND round_id = $2`,
+        [player.listener_of_pod_id, currentRound.id]
+      );
+      listenerPodData = {
+        pod_id: lp.id,
+        label: lp.label,
+        members: lpMembers.rows,
+        answers: lpAnswers.rows,
+        existing_responses: lpFeedback.rows,
+      };
+    }
+  }
+
   res.json({
     phase: game.phase,
     forceLogoutSeq: game.force_logout_seq || 0,
@@ -1461,6 +1530,9 @@ app.get('/me/current-state', async (req, res) => {
       is_alive: player.is_alive,
       role: player.role,
       strikes: Number(player.strikes || 0),
+      can_vote: player.can_vote !== false,
+      is_star: !!player.is_star,
+      listener_of_pod_id: player.listener_of_pod_id || null,
       kill_code: player.kill_code || null,
       character_name: characterRow ? characterRow.name : null,
       character_avatar_file: characterRow ? characterRow.avatar_file : null,
@@ -1483,6 +1555,7 @@ app.get('/me/current-state', async (req, res) => {
     eligibleTargets,
     myVote,
     myInterviews,
+    listenerPodData,
     eliminationEvent,
     killCodeToast: (() => {
       const bc = killBroadcasts.get(game.id);
@@ -2041,39 +2114,25 @@ app.post('/games/:gameId/players/:playerId/strike', async (req, res) => {
       [newStrikes, playerId, gameId]
     );
 
-    let ghosted = false;
+    let canVoteRemoved = false;
 
-    // On 3rd strike, ghost if still alive
-    if (newStrikes >= 3 && player.is_alive) {
+    // On 3rd strike, remove voting rights for this round (no ghosting)
+    if (newStrikes >= 3) {
       await client.query(
-        'UPDATE game_players SET is_alive = FALSE WHERE id = $1 AND game_id = $2',
+        'UPDATE game_players SET can_vote = FALSE WHERE id = $1 AND game_id = $2',
         [playerId, gameId]
       );
-
-      // Record global elimination event on the game for client popups
-      await client.query(
-        `UPDATE games
-         SET last_eliminated_player_id = $1,
-             last_eliminated_seq = COALESCE(last_eliminated_seq, 0) + 1
-         WHERE id = $2`,
-        [playerId, gameId]
-      );
-
-      ghosted = true;
+      canVoteRemoved = true;
     }
 
     await client.query('COMMIT');
-
-    // Win/lose check after elimination
-    if (ghosted) {
-      await checkAndFinalizeGameIfNeeded(gameId);
-    }
 
     res.json({
       ok: true,
       player_id: playerId,
       strikes: newStrikes,
-      ghosted,
+      ghosted: false,
+      can_vote_removed: canVoteRemoved,
     });
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch (_) {}
@@ -2166,6 +2225,9 @@ app.get('/games/:id/debug', async (req, res) => {
             gp.role,
             gp.is_alive,
             COALESCE(gp.strikes, 0) AS strikes,
+            COALESCE(gp.is_star, FALSE) AS is_star,
+            COALESCE(gp.can_vote, TRUE) AS can_vote,
+            gp.listener_of_pod_id,
             c.name AS character_name,
             c.avatar_file AS character_avatar_file
     FROM game_players gp
@@ -2226,7 +2288,7 @@ if (round) {
   let pods = [];
   if (round) {
     const podsRes = await pool.query(
-      `SELECT id, label, current_subround, feedback_ready
+      `SELECT id, label, current_subround, feedback_ready, COALESCE(is_demo_pod, FALSE) AS is_demo_pod
        FROM pods
        WHERE round_id = $1
        ORDER BY id`,
@@ -2236,19 +2298,29 @@ if (round) {
 
     for (const p of podsRaw) {
       const membersRes = await pool.query(
-        `SELECT gp.id, gp.display_name, gp.role, gp.is_alive
+        `SELECT gp.id, gp.display_name, gp.role, gp.is_alive,
+                COALESCE(gp.is_star, FALSE) AS is_star
          FROM pod_members pm
          JOIN game_players gp ON gp.id = pm.game_player_id
          WHERE pm.pod_id = $1
          ORDER BY gp.id`,
         [p.id]
       );
+      // fetch feedback responses for this pod/round
+      const fbRes = await pool.query(
+        `SELECT fr.interviewee_player_id, fr.question_id, fr.agree
+         FROM feedback_responses fr
+         WHERE fr.pod_id = $1 AND fr.round_id = $2`,
+        [p.id, round.id]
+      );
       pods.push({
         id: p.id,
         label: p.label,
         current_subround: p.current_subround || 1,
         feedback_ready: !!p.feedback_ready,
-        members: membersRes.rows
+        is_demo_pod: !!p.is_demo_pod,
+        members: membersRes.rows,
+        feedback_responses: fbRes.rows,
       });
     }
   }
@@ -2334,10 +2406,24 @@ if (round) {
     votes = vRes.rows;
   }
 
+  // round questions
+  let roundQuestions = [];
+  if (round) {
+    const rqRes = await pool.query(
+      `SELECT q.id, q.text FROM round_questions rq
+       JOIN questions q ON q.id = rq.question_id
+       WHERE rq.round_id = $1
+       ORDER BY rq.display_order`,
+      [round.id]
+    );
+    roundQuestions = rqRes.rows;
+  }
+
   res.json({
   game,
   players,
   round,
+  roundQuestions,
   pods,
   assignments,
   votes,
@@ -2349,6 +2435,119 @@ if (round) {
 // ----------------------------
 
 const PORT = process.env.PORT || 3000;
+// teacher: toggle star status on a player (lobby/rally phase only)
+app.post('/games/:gameId/players/:playerId/toggle-star', async (req, res) => {
+  const gameId = Number(req.params.gameId);
+  const playerId = Number(req.params.playerId);
+  if (!gameId || !playerId) return res.status(400).json({ error: 'Invalid ids' });
+  try {
+    const r = await pool.query(
+      `UPDATE game_players
+       SET is_star = NOT COALESCE(is_star, FALSE)
+       WHERE id = $1 AND game_id = $2
+       RETURNING id, is_star`,
+      [playerId, gameId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Player not found' });
+    bumpGameSeq(gameId);
+    res.json({ ok: true, player_id: playerId, is_star: r.rows[0].is_star });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to toggle star' });
+  }
+});
+
+// teacher: assign a demo-pod member as a listener for another pod
+app.post('/games/:gameId/players/:playerId/assign-listener', async (req, res) => {
+  const gameId = Number(req.params.gameId);
+  const playerId = Number(req.params.playerId);
+  const { pod_id } = req.body;
+  if (!gameId || !playerId || !pod_id) return res.status(400).json({ error: 'Missing ids' });
+  try {
+    // Check not already assigned
+    const existing = await pool.query(
+      'SELECT listener_of_pod_id FROM game_players WHERE id = $1 AND game_id = $2',
+      [playerId, gameId]
+    );
+    if (!existing.rows.length) return res.status(404).json({ error: 'Player not found' });
+    if (existing.rows[0].listener_of_pod_id) return res.status(409).json({ error: 'Already assigned as listener' });
+
+    const r = await pool.query(
+      'UPDATE game_players SET listener_of_pod_id = $1 WHERE id = $2 AND game_id = $3 RETURNING id',
+      [pod_id, playerId, gameId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Player not found' });
+    bumpGameSeq(gameId);
+    res.json({ ok: true, player_id: playerId, listener_of_pod_id: pod_id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to assign listener' });
+  }
+});
+
+// teacher or listener: submit feedback responses (agree/disagree) for pod members
+// body: { pod_id, round_id, responses: [{ interviewee_player_id, question_id, agree }] }
+// Auth is optional: player token identifies listener; no token = teacher submission
+app.post('/feedback-responses', async (req, res) => {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
+  const player = token ? await getPlayerByToken(token) : null;
+
+  const { pod_id, round_id, responses } = req.body;
+  if (!pod_id || !round_id || !Array.isArray(responses) || !responses.length) {
+    return res.status(400).json({ error: 'Missing pod_id, round_id, or responses' });
+  }
+
+  try {
+    for (const r of responses) {
+      const { interviewee_player_id, question_id, agree } = r;
+      if (!interviewee_player_id || !question_id || typeof agree !== 'boolean') continue;
+      await pool.query(
+        `INSERT INTO feedback_responses
+           (pod_id, round_id, interviewee_player_id, question_id, agree, submitted_by_player_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (pod_id, round_id, interviewee_player_id, question_id)
+         DO UPDATE SET agree = EXCLUDED.agree, submitted_by_player_id = EXCLUDED.submitted_by_player_id`,
+        [pod_id, round_id, interviewee_player_id, question_id, agree, player.id]
+      );
+    }
+
+    // Fetch the pod's game_id for seq bump
+    const podRow = await pool.query('SELECT game_id FROM pods WHERE id = $1', [pod_id]);
+    if (podRow.rows.length) bumpGameSeq(podRow.rows[0].game_id);
+
+    res.json({ ok: true, saved: responses.length });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save feedback responses', detail: err.message });
+  }
+});
+
+// get feedback responses for a pod (teacher summary / listener pre-population)
+app.get('/pods/:podId/feedback-responses', async (req, res) => {
+  const podId = Number(req.params.podId);
+  try {
+    const r = await pool.query(
+      `SELECT fr.interviewee_player_id,
+              gp.display_name AS interviewee_name,
+              fr.question_id,
+              q.text AS question_text,
+              fr.agree,
+              fr.submitted_by_player_id
+       FROM feedback_responses fr
+       JOIN game_players gp ON gp.id = fr.interviewee_player_id
+       JOIN questions q ON q.id = fr.question_id
+       WHERE fr.pod_id = $1
+       ORDER BY fr.interviewee_player_id, fr.question_id`,
+      [podId]
+    );
+    res.json({ responses: r.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch feedback responses' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`API listening on port ${PORT}`);
 });

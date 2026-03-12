@@ -821,6 +821,71 @@
         }
       }
 
+      async function toggleStar(playerId, playerLabel) {
+        if (!currentGameId) return;
+        try {
+          await apiFetch(`/games/${currentGameId}/players/${playerId}/toggle-star`, { method: 'POST' });
+          await refreshDebugAndGames();
+        } catch (err) {
+          console.error(err);
+          alert('Error toggling star for ' + playerLabel);
+        }
+      }
+
+      async function assignListenerFromSelect(playerId, playerLabel, selectId) {
+        const sel = document.getElementById(selectId);
+        if (!sel) return;
+        const podId = Number(sel.value);
+        if (!podId) return;
+        await assignListener(playerId, playerLabel, podId);
+      }
+
+      async function recordFeedback(podId, roundId, intervieweeId, questionId, agree) {
+        try {
+          await apiFetch('/feedback-responses', {
+            method: 'POST',
+            body: {
+              pod_id: podId,
+              round_id: roundId,
+              responses: [{ interviewee_player_id: intervieweeId, question_id: questionId, agree }],
+            },
+          });
+          await refreshDebug();
+        } catch (err) {
+          console.error(err);
+          alert('Error saving feedback: ' + err.message);
+        }
+      }
+
+      async function assignListener(playerId, playerLabel, podId) {
+        if (!currentGameId) return;
+        if (!confirm(`Assign ${playerLabel} as listener for pod ${podId}?`)) return;
+        try {
+          const out = await apiFetch(`/games/${currentGameId}/players/${playerId}/assign-listener`, {
+            method: 'POST',
+            body: { pod_id: podId },
+          });
+          if (out.error) { alert(out.error); return; }
+          await refreshDebugAndGames();
+        } catch (err) {
+          console.error(err);
+          alert('Error assigning listener: ' + err.message);
+        }
+      }
+
+      async function submitFeedback(podId, roundId, responses) {
+        try {
+          await apiFetch('/feedback-responses', {
+            method: 'POST',
+            body: { pod_id: podId, round_id: roundId, responses },
+          });
+          await refreshDebugAndGames();
+        } catch (err) {
+          console.error(err);
+          alert('Error saving feedback: ' + err.message);
+        }
+      }
+
       async function addStrike(playerId, playerLabel) {
         if (!currentGameId) return;
         const label = playerLabel || "player " + playerId;
@@ -834,10 +899,8 @@
             },
           );
 
-          if (out.ghosted) {
-            alert(
-              `${label} has reached ${out.strikes}/3 strikes and is now a ghost.`,
-            );
+          if (out.can_vote_removed) {
+            alert(`${label} has reached 3 strikes — voting rights removed for this round.`);
           }
 
           await refreshDebugAndGames();
@@ -1125,7 +1188,7 @@
           playersDiv.innerHTML = "<p>No players.</p>";
         } else {
           let html =
-            "<table><thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Alive</th><th>Pod</th><th>Strikes</th><th>Interview 1 saved</th><th>Interview 2 saved</th><th>Voted</th><th>Subround 1 Target</th><th>Subround 2 Target</th><th>Actions</th></tr></thead><tbody>";
+            "<table><thead><tr><th>ID</th><th>Name</th><th>Role</th><th>Alive</th><th>Pod</th><th>Strikes</th><th>Star</th><th>Can Vote</th><th>Interview 1 saved</th><th>Interview 2 saved</th><th>Voted</th><th>Subround 1 Target</th><th>Subround 2 Target</th><th>Actions</th></tr></thead><tbody>";
 
           // Build quick lookup for pods and assignments
           const podByPlayerId = {};
@@ -1192,6 +1255,9 @@
               p.id
             }, ${JSON.stringify(p.display_name || "")})'>Rename</button>`;
 
+            // Star toggle
+            actionHtml += ` <button class="secondary" onclick='toggleStar(${p.id}, ${JSON.stringify(fullName)})'>${p.is_star ? '★ Unstar' : '☆ Star'}</button>`;
+
             // Add + Strike button
             actionHtml += ` <button class="secondary" onclick='addStrike(${p.id}, ${JSON.stringify(fullName)})'>+ Strike</button>`;
 
@@ -1223,6 +1289,10 @@
 
             const strikes = Number(p.strikes || 0);
             const strikesCell = `<span class="badge">${strikes}/3</span>`;
+            const starCell = p.is_star ? `<span class="badge done">★ star</span>` : '';
+            const canVoteCell = p.can_vote === false
+              ? `<span class="badge dead">no vote</span>`
+              : `<span class="badge">ok</span>`;
 
             html += `<tr>
           <td>${p.id}</td>
@@ -1231,6 +1301,8 @@
           <td>${aliveBadge}</td>
           <td>${podLabel}</td>
           <td>${strikesCell}</td>
+          <td>${starCell}</td>
+          <td>${canVoteCell}</td>
           <td>${interview1Badge}</td>
           <td>${interview2Badge}</td>
           <td>${votedBadge}</td>
@@ -1250,17 +1322,25 @@
           podsDiv.innerHTML = "<p>No pods for this round.</p>";
         } else {
           let html = "";
+          const roundId = data.round ? data.round.id : null;
+          const roundQuestions = data.roundQuestions || [];
+          // Build pod lookup by id for listener assignment dropdown
+          const otherPodOptions = data.pods.map(p =>
+            `<option value="${p.id}">${p.label}</option>`
+          ).join('');
+
           data.pods.forEach((pod) => {
             const sr = pod.current_subround || 1;
             const srBadge = `<span class="badge ${sr === 2 ? 'done' : 'todo'}">SR${sr}</span>`;
             const fbBadge = pod.feedback_ready ? `<span class="badge done">feedback</span>` : '';
+            const demoBadge = pod.is_demo_pod ? `<span class="badge done">demo</span>` : '';
             const advBtn = (sr < 2 && !pod.feedback_ready)
               ? `<button class="secondary" style="font-size:11px;padding:2px 8px;margin-left:6px;" onclick="advancePodSubround(${pod.id})">→ SR2</button>`
               : '';
             const fbBtn = !pod.feedback_ready
               ? `<button class="secondary" style="font-size:11px;padding:2px 8px;margin-left:6px;" onclick="advancePodFeedback(${pod.id})">→ Feedback</button>`
               : '';
-            html += `<div class="pod-label">${pod.label} ${srBadge}${fbBadge}${advBtn}${fbBtn}</div>`;
+            html += `<div class="pod-label">${pod.label} ${srBadge}${fbBadge}${demoBadge}${advBtn}${fbBtn}</div>`;
             if (!pod.members || !pod.members.length) {
               html += '<div class="small">No members.</div>';
               return;
@@ -1270,12 +1350,58 @@
               .map((m) => {
                 const baseLabel = playerLabelById[m.id] || m.display_name;
                 let label = baseLabel;
+                if (m.is_star) label = '★ ' + label;
                 if (showRoles && m.role === "baddie") label += " (baddie)";
                 if (!m.is_alive) label += " [out]";
                 return label;
               })
               .join(", ");
             html += "</div>";
+
+            // Listener assignment: for demo pod members, show assign-listener controls
+            if (pod.is_demo_pod && pod.feedback_ready && roundId) {
+              html += '<div class="small" style="margin-top:4px;">';
+              pod.members.forEach((m) => {
+                const mLabel = playerLabelById[m.id] || m.display_name;
+                const listenerId = `listener-select-${m.id}`;
+                html += `<span style="margin-right:8px;">${mLabel}: <select id="${listenerId}" style="font-size:11px;">${otherPodOptions}</select> <button class="secondary" style="font-size:11px;padding:2px 6px;" onclick="assignListenerFromSelect(${m.id},${JSON.stringify(mLabel)}, '${listenerId}')">Assign Listener</button></span>`;
+              });
+              html += '</div>';
+            }
+
+            // Feedback panel: agree/disagree per member per round question
+            if (pod.feedback_ready && roundQuestions.length && roundId) {
+              // Build map of existing responses: "memberId-questionId" -> agree
+              const existingFb = {};
+              (pod.feedback_responses || []).forEach(fr => {
+                existingFb[`${fr.interviewee_player_id}-${fr.question_id}`] = fr.agree;
+              });
+
+              html += `<div style="margin-top:6px;border-top:1px solid #ddd;padding-top:6px;">`;
+              html += `<div class="small"><strong>Feedback:</strong></div>`;
+              html += `<table style="font-size:11px;width:100%;margin-top:4px;"><thead><tr><th>Member</th>`;
+              roundQuestions.forEach(q => { html += `<th title="${q.text}">Q${q.id}</th>`; });
+              html += `</tr></thead><tbody>`;
+
+              pod.members.forEach((m) => {
+                const mLabel = playerLabelById[m.id] || m.display_name;
+                html += `<tr><td>${mLabel}</td>`;
+                roundQuestions.forEach(q => {
+                  const key = `${m.id}-${q.id}`;
+                  const val = existingFb[key];
+                  const agreeActive = val === true ? 'style="background:#4caf50;color:#fff"' : '';
+                  const disagreeActive = val === false ? 'style="background:#f44336;color:#fff"' : '';
+                  html += `<td>
+                    <button class="secondary" ${agreeActive} style="font-size:10px;padding:1px 5px;margin:1px;"
+                      onclick="recordFeedback(${pod.id}, ${roundId}, ${m.id}, ${q.id}, true)">✓</button>
+                    <button class="secondary" ${disagreeActive} style="font-size:10px;padding:1px 5px;margin:1px;"
+                      onclick="recordFeedback(${pod.id}, ${roundId}, ${m.id}, ${q.id}, false)">✗</button>
+                  </td>`;
+                });
+                html += `</tr>`;
+              });
+              html += `</tbody></table></div>`;
+            }
           });
           podsDiv.innerHTML = html;
         }

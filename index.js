@@ -2419,11 +2419,31 @@ if (round) {
     roundQuestions = rqRes.rows;
   }
 
+  // interview answers for this round (for feedback panel context)
+  let interviewAnswers = [];
+  if (round) {
+    const iaRes = await pool.query(
+      `SELECT i.interviewer_player_id,
+              interviewer.display_name AS interviewer_name,
+              i.interviewee_player_id,
+              ia.question_id,
+              ia.reported_value
+       FROM interviews i
+       JOIN game_players interviewer ON interviewer.id = i.interviewer_player_id
+       JOIN interview_answers ia ON ia.interview_id = i.id
+       WHERE i.round_id = $1
+       ORDER BY i.interviewee_player_id, ia.question_id`,
+      [round.id]
+    );
+    interviewAnswers = iaRes.rows;
+  }
+
   res.json({
   game,
   players,
   round,
   roundQuestions,
+  interviewAnswers,
   pods,
   assignments,
   votes,

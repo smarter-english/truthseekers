@@ -1324,10 +1324,11 @@
           let html = "";
           const roundId = data.round ? data.round.id : null;
           const roundQuestions = data.roundQuestions || [];
-          // Build pod lookup by id for listener assignment dropdown
-          const otherPodOptions = data.pods.map(p =>
-            `<option value="${p.id}">${p.label}</option>`
-          ).join('');
+          // Build pod lookup by id for listener assignment dropdown (exclude demo pod)
+          const otherPodOptions = data.pods
+            .filter(p => !p.is_demo_pod)
+            .map(p => `<option value="${p.id}">${p.label}</option>`)
+            .join('');
 
           data.pods.forEach((pod) => {
             const sr = pod.current_subround || 1;

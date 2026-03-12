@@ -2213,34 +2213,13 @@
           header.innerHTML = `<strong>Interview with ${intv.interviewee_name}</strong>`;
           div.appendChild(header);
 
-          // Remind me button + hidden answer peek (3 seconds)
           const answers = (intv.answers || []).map(a => a.reported_value).filter(Boolean);
-
-          const answerPeek = document.createElement("div");
-          answerPeek.style.cssText = "display:none;margin:6px 0 4px;font-size:15px;font-weight:600;color:#1565c0;";
-          answerPeek.textContent = answers.join(" · ");
-
-          if (state.game && state.game.remind_enabled) {
-            let peekTimeout = null;
-            const remindBtn = document.createElement("button");
-            remindBtn.textContent = "Remind me";
-            remindBtn.style.cssText = "margin-top:6px;font-size:13px;padding:4px 12px;";
-            remindBtn.addEventListener("click", async () => {
-              const token = localStorage.getItem("truthseekers-token");
-              if (token) {
-                fetch(`${API}/me/remind`, {
-                  method: "POST",
-                  headers: { Authorization: `Bearer ${token}` },
-                }).catch(() => {});
-              }
-              answerPeek.style.display = "block";
-              if (peekTimeout) clearTimeout(peekTimeout);
-              peekTimeout = setTimeout(() => { answerPeek.style.display = "none"; }, 3000);
-            });
-            div.appendChild(remindBtn);
+          if (answers.length) {
+            const answerPeek = document.createElement("div");
+            answerPeek.style.cssText = "margin:6px 0 4px;font-size:15px;font-weight:600;color:#1565c0;";
+            answerPeek.textContent = answers.join(" · ");
+            div.appendChild(answerPeek);
           }
-
-          div.appendChild(answerPeek);
 
           container.appendChild(div);
         });

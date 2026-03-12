@@ -601,9 +601,9 @@ async function createNextRoundWithMutations(gameId) {
   );
   const round = roundRes.rows[0];
 
-  // update game record; reset remind_enabled at each new round
+  // update game record
   await pool.query(
-    'UPDATE games SET current_round = $1, current_subround = 1, remind_enabled = FALSE WHERE id = $2',
+    'UPDATE games SET current_round = $1, current_subround = 1 WHERE id = $2',
     [round.round_number, gameId]
   );
 
@@ -1458,7 +1458,6 @@ app.get('/me/current-state', async (req, res) => {
       status: game.status,
       winning_side: game.winning_side || null,
       current_round: game.current_round,
-      remind_enabled: game.remind_enabled || false,
       split_label: game.split_label || null,
     },
     currentRound,
@@ -1481,51 +1480,6 @@ app.get('/me/current-state', async (req, res) => {
   });
 });
 
-// Toggle remind_enabled for a game
-app.post('/games/:id/remind-toggle', async (req, res) => {
-  const gameId = Number(req.params.id);
-  const gameRes = await pool.query('SELECT remind_enabled FROM games WHERE id = $1', [gameId]);
-  if (!gameRes.rows.length) return res.status(404).json({ error: 'Game not found' });
-  const newVal = !gameRes.rows[0].remind_enabled;
-  await pool.query('UPDATE games SET remind_enabled = $1 WHERE id = $2', [newVal, gameId]);
-  res.json({ remind_enabled: newVal });
-});
-
-// "Remind me" — briefly reveals this player's kill code to one random living baddie
-app.post('/me/remind', async (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : null;
-  if (!token) return res.status(401).json({ error: 'Missing token' });
-
-  const player = await getPlayerByToken(token);
-  if (!player || !player.is_alive) return res.status(403).json({ error: 'Not allowed' });
-
-  // Check that remind is enabled for this game
-  const gameRes = await pool.query('SELECT remind_enabled FROM games WHERE id = $1', [player.game_id]);
-  if (!gameRes.rows.length || !gameRes.rows[0].remind_enabled) {
-    return res.status(403).json({ error: 'Remind Me is not enabled' });
-  }
-
-  // Find all living baddies in the same game (excluding this player)
-  const baddiesRes = await pool.query(
-    `SELECT id FROM game_players
-     WHERE game_id = $1 AND role = 'baddie' AND is_alive = TRUE AND id != $2`,
-    [player.game_id, player.id]
-  );
-
-  if (baddiesRes.rows.length > 0) {
-    const target = baddiesRes.rows[Math.floor(Math.random() * baddiesRes.rows.length)];
-    const prev = killBroadcasts.get(player.game_id);
-    killBroadcasts.set(player.game_id, {
-      kill_code: player.kill_code,
-      seq: (prev ? prev.seq : 0) + 1,
-      until: Date.now() + 5000,
-      target_player_id: target.id,
-    });
-  }
-
-  res.json({ ok: true });
-});
 
 // record an interview: who you talked to and what they said
 app.post('/rounds/:roundId/interviews', async (req, res) => {

@@ -1453,68 +1453,38 @@
           assignDiv.innerHTML = html;
         }
 
-        // Votes view
+        // Votes view — per-pod rankings
         const votesDiv = document.getElementById("votesView");
-        if (!data.votes || !data.votes.length) {
+        const podVotes = data.votesByPod || [];
+        if (!podVotes.length) {
           votesDiv.innerHTML = "<p>No votes yet.</p>";
         } else {
-          // Build a reverse lookup by display name as a fallback when debug votes lack target_player_id
-          const playerByDisplayName = {};
-          (data.players || []).forEach((p) => {
-            if (p.display_name) playerByDisplayName[p.display_name] = p;
+          let vhtml = "";
+          podVotes.forEach((pod) => {
+            vhtml += `<div style="margin-bottom:18px;">
+              <h4 style="margin:0 0 6px;">Pod ${pod.pod_label}</h4>
+              <table><thead><tr><th>Rank</th><th>Player</th><th>Votes</th></tr></thead><tbody>`;
+            pod.tally.forEach((entry, idx) => {
+              const p = playersById[entry.target_player_id];
+              let nameCell = entry.target_name || "";
+              if (p) {
+                const label = playerLabelById[p.id] || p.display_name;
+                if (p.character_avatar_file) {
+                  const file = p.is_alive === false
+                    ? (p.character_avatar_file.startsWith("ghost_") ? p.character_avatar_file : `ghost_${p.character_avatar_file}`)
+                    : p.character_avatar_file;
+                  nameCell = `<div style="display:flex;align-items:center;gap:8px;">
+                    <img src="/assets/icons/${file}" alt="avatar" style="width:28px;height:28px;object-fit:contain;border-radius:0;" />
+                    <span>${label}</span></div>`;
+                } else {
+                  nameCell = label;
+                }
+              }
+              const rankLabel = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `${idx + 1}.`;
+              vhtml += `<tr><td>${rankLabel}</td><td>${nameCell}</td><td>${entry.vote_count}</td></tr>`;
+            });
+            vhtml += "</tbody></table></div>";
           });
-
-          function voteTargetLabel(v) {
-            // Prefer explicit id if present
-            const tid = v.target_player_id || v.target_id || null;
-            if (tid && playersById[tid]) {
-              return { player: playersById[tid], label: playerLabelById[tid] };
-            }
-
-            // Fallback: try to match by display name
-            const maybe = v.target_name && playerByDisplayName[v.target_name];
-            if (maybe) {
-              return {
-                player: maybe,
-                label: playerLabelById[maybe.id] || maybe.display_name,
-              };
-            }
-
-            // Last resort
-            return { player: null, label: v.target_name || "" };
-          }
-
-          let vhtml =
-            "<table><thead><tr><th>Target</th><th>Votes</th></tr></thead><tbody>";
-
-          data.votes.forEach((v) => {
-            const info = voteTargetLabel(v);
-            let targetCell = info.label;
-
-            if (info.player && info.player.character_avatar_file) {
-              // Use ghost avatar if eliminated
-              const file =
-                info.player.is_alive === false
-                  ? info.player.character_avatar_file.startsWith("ghost_")
-                    ? info.player.character_avatar_file
-                    : `ghost_${info.player.character_avatar_file}`
-                  : info.player.character_avatar_file;
-
-              targetCell = `
-                <div style="display:flex; align-items:center; gap:10px;">
-                  <img src="/assets/icons/${file}" alt="avatar" style="width:32px; height:32px; object-fit:contain; border-radius:0;" />
-                  <div>${info.label}</div>
-                </div>
-              `;
-            }
-
-            vhtml += `<tr>
-          <td>${targetCell}</td>
-          <td>${v.vote_count}</td>
-        </tr>`;
-          });
-
-          vhtml += "</tbody></table>";
           votesDiv.innerHTML = vhtml;
         }
       }

@@ -2242,16 +2242,11 @@
         // If ghost, show a friendly message and hide voting controls
         if (!state.player.is_alive) {
           section.classList.remove("hidden");
-
-          // hide the dropdown and button
           select.classList.add("hidden");
           if (voteBtn) voteBtn.classList.add("hidden");
-
-          // show ghost message
           if (currentVoteDiv) {
             currentVoteDiv.classList.remove("hidden");
-            currentVoteDiv.textContent =
-              "Sorry - no voting for you: you are a ghost.";
+            currentVoteDiv.textContent = "Sorry - no voting for you: you are a ghost.";
           }
           return;
         }
@@ -2264,15 +2259,30 @@
 
         section.classList.remove("hidden");
 
-        // ensure controls are visible for living players
+        // If already voted this round, lock the UI
+        if (state.myVote && state.myVote.voted) {
+          select.classList.add("hidden");
+          if (voteBtn) voteBtn.classList.add("hidden");
+          if (currentVoteDiv) {
+            currentVoteDiv.classList.remove("hidden");
+            const tid = state.myVote.target_player_id;
+            if (tid === null) {
+              currentVoteDiv.textContent = "You abstained this round.";
+            } else {
+              const t = targets.find(t => t.id === tid);
+              const name = t ? formatName(t.display_name, t.character_name) : "someone";
+              currentVoteDiv.textContent = `You voted to eliminate ${name}.`;
+            }
+          }
+          return;
+        }
+
+        // Show voting controls
         select.classList.remove("hidden");
         if (voteBtn) voteBtn.classList.remove("hidden");
         if (currentVoteDiv) currentVoteDiv.classList.remove("hidden");
 
         if (targetsChanged) {
-          // Remember what the user currently has selected (if any)
-          const previousValue = select.value;
-
           select.innerHTML = '<option value="">-- choose a player --</option>';
           targets.forEach((t) => {
             const opt = document.createElement("option");
@@ -2280,29 +2290,14 @@
             opt.textContent = formatName(t.display_name, t.character_name);
             select.appendChild(opt);
           });
-
-          // Try to restore selection: prefer in-progress selection, then last submitted vote
-          const optionValues = Array.from(select.options).map((o) => o.value);
-          if (previousValue && optionValues.includes(previousValue)) {
-            select.value = previousValue;
-          } else if (
-            lastVoteTargetId !== null &&
-            optionValues.includes(String(lastVoteTargetId))
-          ) {
-            select.value = String(lastVoteTargetId);
-          } else {
-            select.value = "";
-          }
+          const abstainOpt = document.createElement("option");
+          abstainOpt.value = "abstain";
+          abstainOpt.textContent = "Abstain";
+          select.appendChild(abstainOpt);
+          select.value = "";
         }
 
-        // Restore the "You voted" message, if any
-        if (currentVoteDiv) {
-          if (lastVoteTargetName) {
-            currentVoteDiv.textContent = `You voted to eliminate ${lastVoteTargetName}.`;
-          } else {
-            currentVoteDiv.textContent = "";
-          }
-        }
+        if (currentVoteDiv) currentVoteDiv.textContent = "";
       }
 
       function showRole() {
@@ -2436,12 +2431,16 @@
 
         const value = select.value;
         if (!value) {
-          alert("Please choose someone to eliminate.");
+          alert("Please choose someone to eliminate, or select Abstain.");
           return;
         }
 
-        const name = select.options[select.selectedIndex].textContent;
-        if (!confirm(`Are you sure you want to eliminate ${name}?`)) return;
+        const isAbstain = value === "abstain";
+        const name = isAbstain ? "Abstain" : select.options[select.selectedIndex].textContent;
+        const confirmMsg = isAbstain
+          ? "Are you sure you want to abstain?"
+          : `Are you sure you want to eliminate ${name}?`;
+        if (!confirm(confirmMsg)) return;
 
         try {
           const res = await fetch(`${API}/rounds/${currentRoundId}/vote`, {
@@ -2450,7 +2449,7 @@
               "Content-Type": "application/json",
               Authorization: `Bearer ${joinToken}`,
             },
-            body: JSON.stringify({ target_player_id: Number(value) }),
+            body: JSON.stringify({ target_player_id: isAbstain ? null : Number(value) }),
           });
           if (!res.ok) {
             const text = await res.text();
@@ -2459,14 +2458,12 @@
             return;
           }
 
-          // Remember last vote in memory
-          lastVoteTargetId = Number(value);
-          lastVoteTargetName = name;
-
           if (currentVoteDiv) {
-            currentVoteDiv.textContent = `You voted to eliminate ${name}.`;
+            currentVoteDiv.textContent = isAbstain
+              ? "You abstained this round."
+              : `You voted to eliminate ${name}.`;
           }
-          alert(`Your vote to eliminate ${name} has been recorded.`);
+          alert(isAbstain ? "You have abstained." : `Your vote to eliminate ${name} has been recorded.`);
         } catch (err) {
           console.error(err);
           alert("Error submitting vote (see console).");

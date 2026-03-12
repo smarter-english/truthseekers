@@ -1401,23 +1401,36 @@ app.get('/me/current-state', async (req, res) => {
     }
   }
 
-  // eligible voting targets: all other alive players in the same game
-  if (game.status === 'in_progress') {
+  // eligible voting targets: alive pod members only (excluding self)
+  if (game.status === 'in_progress' && pod) {
     const tRes = await pool.query(
       `SELECT gp.id,
               gp.display_name,
               gp.is_alive,
               c.name AS character_name,
               c.avatar_file AS character_avatar_file
-      FROM game_players gp
-      LEFT JOIN characters c ON c.id = gp.character_id
-      WHERE gp.game_id = $1
-        AND gp.is_alive = TRUE
-        AND gp.id <> $2
-      ORDER BY gp.display_name`,
-      [player.game_id, player.id]
+       FROM pod_members pm
+       JOIN game_players gp ON gp.id = pm.game_player_id
+       LEFT JOIN characters c ON c.id = gp.character_id
+       WHERE pm.pod_id = $1
+         AND gp.is_alive = TRUE
+         AND gp.id <> $2
+       ORDER BY gp.display_name`,
+      [pod.id, player.id]
     );
     eligibleTargets = tRes.rows;
+  }
+
+  // has this player already voted this round?
+  let myVote = null;
+  if (currentRound) {
+    const voteRes = await pool.query(
+      'SELECT target_player_id FROM votes WHERE round_id = $1 AND voter_player_id = $2',
+      [currentRound.id, player.id]
+    );
+    if (voteRes.rows.length > 0) {
+      myVote = { voted: true, target_player_id: voteRes.rows[0].target_player_id };
+    }
   }
 
   // Reveal baddies at end of game so clients can show a game-over popup
@@ -1468,6 +1481,7 @@ app.get('/me/current-state', async (req, res) => {
     podMembers,
     interviewTarget,
     eligibleTargets,
+    myVote,
     myInterviews,
     eliminationEvent,
     killCodeToast: (() => {
@@ -1675,60 +1689,48 @@ app.post('/rounds/:roundId/vote', async (req, res) => {
     return res.status(400).json({ error: 'Ghosts cannot vote' });
   }
 
+  // target_player_id may be null (abstain)
   const { target_player_id } = req.body;
-  if (!target_player_id) {
-    return res.status(400).json({ error: 'Missing target_player_id' });
+  if (target_player_id === undefined) {
+    return res.status(400).json({ error: 'Missing target_player_id (use null to abstain)' });
   }
 
-  // verify round belongs to the same game
-  const roundRes = await pool.query(
-    'SELECT * FROM rounds WHERE id = $1',
-    [roundId]
-  );
+  // verify round belongs to the same game and is current
+  const roundRes = await pool.query('SELECT * FROM rounds WHERE id = $1', [roundId]);
   const round = roundRes.rows[0];
-  if (!round) {
-    return res.status(404).json({ error: 'Round not found' });
-  }
-  if (round.game_id !== voter.game_id) {
-    return res.status(400).json({ error: 'Round not in your game' });
-  }
+  if (!round) return res.status(404).json({ error: 'Round not found' });
+  if (round.game_id !== voter.game_id) return res.status(400).json({ error: 'Round not in your game' });
 
-  // ensure target is a living player in the same game
-  const targetRes = await pool.query(
-    'SELECT id, is_alive FROM game_players WHERE id = $1 AND game_id = $2',
-    [target_player_id, voter.game_id]
-  );
-  const target = targetRes.rows[0];
-  if (!target || !target.is_alive) {
-    return res.status(400).json({ error: 'Invalid target for elimination' });
-  }
-
-  // optional: check that this round is the current round
-  const gameRes = await pool.query(
-    'SELECT current_round FROM games WHERE id = $1',
-    [voter.game_id]
-  );
+  const gameRes = await pool.query('SELECT current_round FROM games WHERE id = $1', [voter.game_id]);
   const game = gameRes.rows[0];
-  if (game && game.current_round) {
-    const roundNumRes = await pool.query(
-      'SELECT round_number FROM rounds WHERE id = $1',
-      [roundId]
-    );
-    const roundNumRow = roundNumRes.rows[0];
-    if (roundNumRow && roundNumRow.round_number !== game.current_round) {
-      return res.status(400).json({ error: 'Can only vote in the current round' });
-    }
+  if (game && game.current_round && round.round_number !== game.current_round) {
+    return res.status(400).json({ error: 'Can only vote in the current round' });
   }
 
-  // upsert vote (one vote per voter per round)
-  await pool.query(
+  // if not abstaining, ensure target is a living pod member
+  if (target_player_id !== null) {
+    const targetRes = await pool.query(
+      `SELECT gp.id FROM game_players gp
+       JOIN pod_members pm ON pm.game_player_id = gp.id
+       JOIN pods p ON p.id = pm.pod_id
+       JOIN pod_members pm2 ON pm2.pod_id = p.id AND pm2.game_player_id = $1
+       WHERE gp.id = $2 AND gp.is_alive = TRUE AND gp.game_id = $3`,
+      [voter.id, target_player_id, voter.game_id]
+    );
+    if (!targetRes.rows.length) return res.status(400).json({ error: 'Invalid target' });
+  }
+
+  // Insert vote — do not allow overwrites
+  const result = await pool.query(
     `INSERT INTO votes (round_id, voter_player_id, target_player_id)
      VALUES ($1, $2, $3)
-     ON CONFLICT (round_id, voter_player_id)
-     DO UPDATE SET target_player_id = EXCLUDED.target_player_id,
-                   created_at = NOW()`,
+     ON CONFLICT (round_id, voter_player_id) DO NOTHING`,
     [roundId, voter.id, target_player_id]
   );
+
+  if (result.rowCount === 0) {
+    return res.status(409).json({ error: 'You have already voted this round' });
+  }
 
   bumpGameSeq(voter.game_id);
   res.json({ ok: true });

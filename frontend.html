@@ -2375,7 +2375,8 @@
         if (!section || !container) return;
 
         const lpd = state && state.listenerPodData;
-        if (!lpd) {
+        const currentPhase = state && (state.phase || (state.game && state.game.phase));
+        if (!lpd || currentPhase !== 'feedback') {
           section.classList.add("hidden");
           section.classList.remove("visible");
           section.style.display = "none";

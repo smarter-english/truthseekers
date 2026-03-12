@@ -1392,8 +1392,11 @@
                 existingFb[`${fr.interviewee_player_id}-${fr.question_id}`] = fr.agree;
               });
 
+              const qTextById = {};
+              roundQuestions.forEach(q => { qTextById[q.id] = q.text; });
+
               html += `<div style="margin-top:8px;border-top:1px solid #ddd;padding-top:6px;">`;
-              html += `<div class="small" style="margin-bottom:4px;"><strong>Feedback (agree/disagree with recorded answers):</strong></div>`;
+              html += `<div class="small" style="margin-bottom:4px;"><strong>Feedback:</strong></div>`;
 
               pod.members.forEach((m) => {
                 const info = answersByInterviewee[m.id];
@@ -1406,8 +1409,9 @@
                   const val = existingFb[key];
                   const agStyle = val === true  ? 'background:#4caf50;color:#fff;border-color:#4caf50;' : '';
                   const diStyle = val === false ? 'background:#f44336;color:#fff;border-color:#f44336;' : '';
+                  const qLabel = qTextById[a.question_id] || `Q${a.question_id}`;
                   html += `<div style="display:flex;align-items:center;gap:6px;margin:2px 0;font-size:11px;">
-                    <span style="flex:1;color:#555;">${a.reported_value !== undefined ? `<em>${a.reported_value}</em>` : '—'}</span>
+                    <span style="flex:1;color:#555;">${qLabel}</span>
                     <button class="secondary" style="font-size:10px;padding:1px 7px;${agStyle}"
                       onclick="recordFeedback(${pod.id},${roundId},${m.id},${a.question_id},true)">✓ Agree</button>
                     <button class="secondary" style="font-size:10px;padding:1px 7px;${diStyle}"

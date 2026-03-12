@@ -111,6 +111,10 @@ async function createPodsAndAssignmentsForRound(gameId, roundId) {
     return;
   }
 
+  // determine if this is round 1 (demo pod only applies in round 1)
+  const roundRow = await pool.query('SELECT round_number FROM rounds WHERE id = $1', [roundId]);
+  const isRoundOne = (roundRow.rows[0]?.round_number ?? 1) === 1;
+
   const totalLive = allPlayers.filter(p => p.is_alive).length;
 
   // ideal pod count from POD_SPLITS
@@ -136,11 +140,11 @@ async function createPodsAndAssignmentsForRound(gameId, roundId) {
   const byId = {};
   shuffled.forEach(p => { byId[p.id] = p; });
 
-  // Identify star players (alive stars go into demo pod 0)
-  const starPlayerIds = new Set(shuffled.filter(p => p.is_alive && p.is_star).map(p => p.id));
+  // Stars only get a demo pod in round 1; after that they're treated as normal players
+  const starPlayerIds = new Set(isRoundOne ? shuffled.filter(p => p.is_alive && p.is_star).map(p => p.id) : []);
   const hasDemoPod = starPlayerIds.size > 0;
 
-  // Split alive players by role, excluding stars from baddie/goodie pools
+  // Split alive players by role, excluding stars (round 1 only) from baddie/goodie pools
   const liveBaddies = shuffled.filter(p => p.is_alive && p.role === 'baddie' && !starPlayerIds.has(p.id));
   const liveGoodies = shuffled.filter(p => p.is_alive && p.role !== 'baddie' && !starPlayerIds.has(p.id));
 
@@ -776,9 +780,30 @@ async function startSingleGame(gameId) {
   else if (numPlayers <= 16) numBaddies = 5;
   else numBaddies = 6;
 
-  const shuffled = [...players].sort(() => Math.random() - 0.5);
-  const baddieIds = shuffled.slice(0, numBaddies).map(p => p.id);
-  const goodieIds = shuffled.slice(numBaddies).map(p => p.id);
+  // Fetch star player ids so we can assign them a proportional baddie/goodie split
+  const starsRes = await pool.query(
+    'SELECT id FROM game_players WHERE game_id = $1 AND COALESCE(is_star, FALSE) = TRUE',
+    [gameId]
+  );
+  const starIds = starsRes.rows.map(r => r.id);
+  const nonStarPlayers = players.filter(p => !starIds.includes(p.id));
+
+  // How many stars should be baddies (rounded, proportional to overall ratio)
+  const baddieRatio = numBaddies / numPlayers;
+  const starBaddieCount = Math.round(baddieRatio * starIds.length);
+
+  // Shuffle stars and non-stars independently, then allocate roles
+  const shuffledStars = [...starIds].sort(() => Math.random() - 0.5);
+  const starBaddieIds = shuffledStars.slice(0, starBaddieCount);
+  const starGoodieIds = shuffledStars.slice(starBaddieCount);
+
+  const remainingBaddiesNeeded = numBaddies - starBaddieCount;
+  const shuffledNonStars = [...nonStarPlayers].sort(() => Math.random() - 0.5);
+  const nonStarBaddieIds = shuffledNonStars.slice(0, remainingBaddiesNeeded).map(p => p.id);
+  const nonStarGoodieIds = shuffledNonStars.slice(remainingBaddiesNeeded).map(p => p.id);
+
+  const baddieIds = [...starBaddieIds, ...nonStarBaddieIds];
+  const goodieIds = [...starGoodieIds, ...nonStarGoodieIds];
 
   if (baddieIds.length) {
     await pool.query('UPDATE game_players SET role = $1 WHERE id = ANY($2)', ['baddie', baddieIds]);
@@ -1808,8 +1833,99 @@ app.post('/rounds/:roundId/vote', async (req, res) => {
   }
 
   bumpGameSeq(voter.game_id);
+
+  // Auto-elimination: if all can-vote alive pod members have now voted, ghost the leader(s)
+  await maybeAutoEliminate(voter.game_id, roundId, voter.id);
+
   res.json({ ok: true });
 });
+
+// After every vote: check if the voter's pod is fully voted; if so, ghost the top vote-getter(s).
+async function maybeAutoEliminate(gameId, roundId, voterPlayerId) {
+  try {
+    // Find the voter's pod for this round
+    const podRes = await pool.query(
+      `SELECT p.id AS pod_id
+       FROM pods p
+       JOIN pod_members pm ON pm.pod_id = p.id
+       WHERE pm.game_player_id = $1
+         AND p.round_id = $2
+       LIMIT 1`,
+      [voterPlayerId, roundId]
+    );
+    if (!podRes.rows.length) return;
+    const podId = podRes.rows[0].pod_id;
+
+    // Eligible voters in this pod: alive players with can_vote = TRUE
+    const eligibleRes = await pool.query(
+      `SELECT gp.id
+       FROM pod_members pm
+       JOIN game_players gp ON gp.id = pm.game_player_id
+       WHERE pm.pod_id = $1
+         AND gp.is_alive = TRUE
+         AND COALESCE(gp.can_vote, TRUE) = TRUE`,
+      [podId]
+    );
+    const eligibleIds = eligibleRes.rows.map(r => r.id);
+    if (!eligibleIds.length) return;
+
+    // Check how many of those have voted this round
+    const votedRes = await pool.query(
+      `SELECT voter_player_id FROM votes
+       WHERE round_id = $1
+         AND voter_player_id = ANY($2::int[])`,
+      [roundId, eligibleIds]
+    );
+    if (votedRes.rows.length < eligibleIds.length) return; // not everyone voted yet
+
+    // All voted — tally non-abstain votes against alive pod members
+    const tallyRes = await pool.query(
+      `SELECT v.target_player_id, COUNT(*)::int AS vote_count
+       FROM votes v
+       JOIN game_players gp ON gp.id = v.target_player_id
+       WHERE v.round_id = $1
+         AND v.target_player_id IS NOT NULL
+         AND gp.is_alive = TRUE
+         AND v.voter_player_id = ANY($2::int[])
+       GROUP BY v.target_player_id
+       ORDER BY vote_count DESC`,
+      [roundId, eligibleIds]
+    );
+    if (!tallyRes.rows.length) return; // all abstained
+
+    const maxVotes = tallyRes.rows[0].vote_count;
+    const toEliminate = tallyRes.rows.filter(r => r.vote_count === maxVotes);
+
+    for (const { target_player_id } of toEliminate) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          'UPDATE game_players SET is_alive = FALSE WHERE id = $1 AND game_id = $2',
+          [target_player_id, gameId]
+        );
+        await client.query(
+          `UPDATE games
+           SET last_eliminated_player_id = $1,
+               last_eliminated_seq = COALESCE(last_eliminated_seq, 0) + 1
+           WHERE id = $2`,
+          [target_player_id, gameId]
+        );
+        await client.query('COMMIT');
+      } catch (err) {
+        try { await client.query('ROLLBACK'); } catch (_) {}
+        throw err;
+      } finally {
+        client.release();
+      }
+      await checkAndFinalizeGameIfNeeded(gameId);
+    }
+
+    bumpGameSeq(gameId);
+  } catch (err) {
+    console.error('maybeAutoEliminate error:', err);
+  }
+}
 
 // teacher: change current subround (e.g., from 1 to 2)
 app.post('/games/:id/subround', async (req, res) => {
@@ -2391,8 +2507,9 @@ if (round) {
   }
 
 
-  // vote summary for current round
+  // vote summary for current round — per pod
   let votes = [];
+  let votesByPod = [];
   if (round) {
     const vRes = await pool.query(
       `SELECT v.target_player_id,
@@ -2406,6 +2523,30 @@ if (round) {
       [round.id]
     );
     votes = vRes.rows;
+
+    // per-pod: for each pod, tally votes where both voter AND target are pod members
+    const podVoteRes = await pool.query(
+      `SELECT p.id AS pod_id, p.label AS pod_label,
+              v.target_player_id,
+              target.display_name AS target_name,
+              COUNT(*) AS vote_count
+       FROM votes v
+       JOIN pod_members pm_voter ON pm_voter.game_player_id = v.voter_player_id
+       JOIN pods p ON p.id = pm_voter.pod_id AND p.round_id = $1
+       JOIN game_players target ON target.id = v.target_player_id
+       WHERE v.round_id = $1
+         AND v.target_player_id IS NOT NULL
+       GROUP BY p.id, p.label, v.target_player_id, target.display_name
+       ORDER BY p.id, vote_count DESC, target_name ASC`,
+      [round.id]
+    );
+    // group into array of { pod_id, pod_label, tally: [{target_player_id, target_name, vote_count}] }
+    const podMap = {};
+    for (const row of podVoteRes.rows) {
+      if (!podMap[row.pod_id]) podMap[row.pod_id] = { pod_id: row.pod_id, pod_label: row.pod_label, tally: [] };
+      podMap[row.pod_id].tally.push({ target_player_id: row.target_player_id, target_name: row.target_name, vote_count: Number(row.vote_count) });
+    }
+    votesByPod = Object.values(podMap);
   }
 
   // round questions
@@ -2449,6 +2590,7 @@ if (round) {
   pods,
   assignments,
   votes,
+  votesByPod,
   voteRecords,
   interviewRecords
 });

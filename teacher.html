@@ -1408,7 +1408,11 @@
                 const mLabel = playerLabelById[m.id] || m.display_name;
                 const interviewerList = [...info.interviewerNames].join(' & ');
                 html += `<div style="margin-bottom:6px;background:#f9f9f9;border:1px solid #eee;border-radius:4px;padding:5px 8px;">`;
-                html += `<div style="font-size:11px;font-weight:600;margin-bottom:3px;">${mLabel} <span style="font-weight:400;color:#888;">— interviewed by ${interviewerList}</span></div>`;
+                html += `<div style="font-size:11px;font-weight:600;margin-bottom:3px;display:flex;align-items:center;gap:6px;">
+                  <span>${mLabel}</span>
+                  <span style="font-weight:400;color:#888;">— interviewed by ${interviewerList}</span>
+                  <button class="secondary" style="font-size:10px;padding:1px 7px;margin-left:auto;" onclick='addStrike(${m.id},${JSON.stringify(mLabel)})'>⚠ Strike</button>
+                </div>`;
                 Object.keys(info.questions).forEach(qId => {
                   const key = `${m.id}-${qId}`;
                   const val = existingFb[key];

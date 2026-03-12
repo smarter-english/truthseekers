@@ -2392,29 +2392,45 @@
           listenerChoices[`${r.interviewee_player_id}-${r.question_id}`] = r.agree;
         });
 
-        // Group answers by member
-        const answersByMember = {};
+        // Group by interviewee: collect unique interviewer names + deduplicate questions
+        const byMember = {};
         (lpd.answers || []).forEach(a => {
-          if (!answersByMember[a.interviewee_player_id]) answersByMember[a.interviewee_player_id] = [];
-          answersByMember[a.interviewee_player_id].push(a);
+          if (!byMember[a.interviewee_player_id]) {
+            byMember[a.interviewee_player_id] = { interviewerNames: new Set(), questionIds: new Set(), qText: {} };
+          }
+          const e = byMember[a.interviewee_player_id];
+          if (a.interviewer_name) e.interviewerNames.add(a.interviewer_name);
+          e.questionIds.add(a.question_id);
+          e.qText[a.question_id] = a.question_text;
         });
+
+        const gameId = lastState && lastState.game ? lastState.game.id : null;
 
         container.innerHTML = '';
         (lpd.members || []).forEach(m => {
-          const memberAnswers = answersByMember[m.id] || [];
-          if (!memberAnswers.length) return;
+          const info = byMember[m.id];
+          if (!info) return;
 
           const memberDiv = document.createElement("div");
-          memberDiv.style.cssText = "margin-bottom:12px;";
-          memberDiv.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">${m.display_name} (${m.character_name || '?'})</div>`;
+          memberDiv.style.cssText = "margin-bottom:10px;background:#f9f9f9;border:1px solid #eee;border-radius:6px;padding:8px 10px;";
 
-          memberAnswers.forEach(a => {
-            const key = `${m.id}-${a.question_id}`;
+          const interviewerList = [...info.interviewerNames].join(' & ');
+          const strikeBtn = gameId
+            ? `<button class="listener-disagree" style="font-size:12px;padding:2px 8px;" onclick="addListenerStrike(${gameId},${m.id},'${m.display_name}')">⚠ Strike</button>`
+            : '';
+          memberDiv.innerHTML = `<div style="font-weight:600;margin-bottom:5px;display:flex;align-items:center;gap:8px;">
+            <span>${m.display_name} (${m.character_name || '?'})</span>
+            <span style="font-weight:400;font-size:12px;color:#888;">interviewed by ${interviewerList}</span>
+            ${strikeBtn}
+          </div>`;
+
+          [...info.questionIds].forEach(qId => {
+            const key = `${m.id}-${qId}`;
             const current = listenerChoices[key];
             const row = document.createElement("div");
             row.style.cssText = "display:flex;align-items:center;gap:8px;margin:3px 0;font-size:14px;";
             row.innerHTML = `
-              <span style="flex:1">${a.question_text}: <strong>${a.reported_value}</strong></span>
+              <span style="flex:1;color:#555;">${info.qText[qId] || 'Q' + qId}</span>
               <button class="listener-agree${current === true ? ' active' : ''}"
                 data-key="${key}" data-agree="true"
                 onclick="setListenerChoice('${key}', true, this)">✓ Agree</button>
@@ -2440,6 +2456,23 @@
             const ba = b.dataset.agree === 'true';
             b.classList.toggle('active', ba === agree);
           });
+        }
+      }
+
+      async function addListenerStrike(gameId, playerId, displayName) {
+        try {
+          const res = await fetch(`${API}/games/${gameId}/players/${playerId}/strike`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          if (data.can_vote_removed) {
+            alert(`${displayName} has reached 3 strikes — voting rights removed for this round.`);
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Could not add strike: ' + err.message);
         }
       }
 

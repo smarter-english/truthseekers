@@ -1831,6 +1831,19 @@
         const phase = (state.pod && state.pod.feedback_ready && (gamePhase2 === "interview1" || gamePhase2 === "interview2"))
           ? "feedback"
           : gamePhase2;
+
+        // Update body background colour for current phase
+        const _phaseClasses = ['phase-rally','phase-interview1','phase-interview2','phase-feedback','phase-voting'];
+        document.body.classList.remove(..._phaseClasses);
+        if (phase) document.body.classList.add(`phase-${phase}`);
+
+        // Show Role button: only in round 1 rally
+        const _applyRound = state.currentRound ? state.currentRound.round_number : (state.game && state.game.current_round);
+        const _showRoleBtn = document.getElementById("showRoleBtn");
+        if (_showRoleBtn) {
+          _showRoleBtn.style.display = (_applyRound === 1 && phase === 'rally') ? '' : 'none';
+        }
+
         const banner = document.getElementById("phaseBanner");
 
         // Update round/phase label in header

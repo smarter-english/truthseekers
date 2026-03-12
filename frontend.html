@@ -43,7 +43,13 @@
         background: #fff;
         -webkit-text-size-adjust: 100%;
         overflow-x: hidden;
+        transition: background-color 0.7s ease;
       }
+      body.phase-rally      { background-color: #fffde7; }
+      body.phase-interview1 { background-color: #e3f2fd; }
+      body.phase-interview2 { background-color: #ddeeff; }
+      body.phase-feedback   { background-color: #e8f5e9; }
+      body.phase-voting     { background-color: #fce4ec; }
 
       .player-card {
         display: flex;
@@ -1908,6 +1914,17 @@
           // Ensure all gameplay sections are hidden.
           hideGameplaySections();
           return;
+        }
+
+        // Phase background colour + Show Role button visibility
+        const _phase = state.phase || (state.game && state.game.phase);
+        const _round = state.currentRound ? state.currentRound.round_number : (state.game && state.game.current_round);
+        const phaseClasses = ['phase-rally','phase-interview1','phase-interview2','phase-feedback','phase-voting'];
+        document.body.classList.remove(...phaseClasses);
+        if (_phase) document.body.classList.add(`phase-${_phase}`);
+        const showRoleBtn = document.getElementById("showRoleBtn");
+        if (showRoleBtn) {
+          showRoleBtn.style.display = (_round === 1 && _phase === 'rally') ? '' : 'none';
         }
 
         // Update round/phase label in header for initial render

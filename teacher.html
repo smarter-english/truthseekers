@@ -1373,16 +1373,19 @@
             // what was recorded, and agree/disagree per answer.
             // Visible as soon as interview answers exist (no need to wait for feedback_ready).
             const podMemberIds = new Set(pod.members.map(m => m.id));
+            // Group by interviewee: collect unique interviewer names + one entry per question
             const answersByInterviewee = {};
             (data.interviewAnswers || []).forEach(a => {
               if (!podMemberIds.has(a.interviewee_player_id)) return;
               if (!answersByInterviewee[a.interviewee_player_id]) {
                 answersByInterviewee[a.interviewee_player_id] = {
-                  interviewer_name: a.interviewer_name,
-                  answers: []
+                  interviewerNames: new Set(),
+                  questions: {},  // question_id -> question_id (deduped)
                 };
               }
-              answersByInterviewee[a.interviewee_player_id].answers.push(a);
+              const entry = answersByInterviewee[a.interviewee_player_id];
+              entry.interviewerNames.add(a.interviewer_name);
+              entry.questions[a.question_id] = a.question_id;
             });
 
             const hasFbData = Object.keys(answersByInterviewee).length > 0;
@@ -1402,20 +1405,21 @@
                 const info = answersByInterviewee[m.id];
                 if (!info) return;
                 const mLabel = playerLabelById[m.id] || m.display_name;
+                const interviewerList = [...info.interviewerNames].join(' & ');
                 html += `<div style="margin-bottom:6px;background:#f9f9f9;border:1px solid #eee;border-radius:4px;padding:5px 8px;">`;
-                html += `<div style="font-size:11px;font-weight:600;margin-bottom:3px;">${mLabel} <span style="font-weight:400;color:#888;">— interviewed by ${info.interviewer_name}</span></div>`;
-                info.answers.forEach(a => {
-                  const key = `${m.id}-${a.question_id}`;
+                html += `<div style="font-size:11px;font-weight:600;margin-bottom:3px;">${mLabel} <span style="font-weight:400;color:#888;">— interviewed by ${interviewerList}</span></div>`;
+                Object.keys(info.questions).forEach(qId => {
+                  const key = `${m.id}-${qId}`;
                   const val = existingFb[key];
                   const agStyle = val === true  ? 'background:#4caf50;color:#fff;border-color:#4caf50;' : '';
                   const diStyle = val === false ? 'background:#f44336;color:#fff;border-color:#f44336;' : '';
-                  const qLabel = qTextById[a.question_id] || `Q${a.question_id}`;
+                  const qLabel = qTextById[qId] || `Q${qId}`;
                   html += `<div style="display:flex;align-items:center;gap:6px;margin:2px 0;font-size:11px;">
                     <span style="flex:1;color:#555;">${qLabel}</span>
                     <button class="secondary" style="font-size:10px;padding:1px 7px;${agStyle}"
-                      onclick="recordFeedback(${pod.id},${roundId},${m.id},${a.question_id},true)">✓ Agree</button>
+                      onclick="recordFeedback(${pod.id},${roundId},${m.id},${qId},true)">✓ Agree</button>
                     <button class="secondary" style="font-size:10px;padding:1px 7px;${diStyle}"
-                      onclick="recordFeedback(${pod.id},${roundId},${m.id},${a.question_id},false)">✗ Disagree</button>
+                      onclick="recordFeedback(${pod.id},${roundId},${m.id},${qId},false)">✗ Disagree</button>
                   </div>`;
                 });
                 html += `</div>`;

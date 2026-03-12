@@ -1493,8 +1493,10 @@ app.get('/me/current-state', async (req, res) => {
       );
       // Interview answers recorded by each member (as interviewee) this round
       const lpAnswers = await pool.query(
-        `SELECT i.interviewee_player_id, ia2.question_id, q.text AS question_text, ia2.reported_value
+        `SELECT i.interviewee_player_id, ia2.question_id, q.text AS question_text,
+                ia2.reported_value, interviewer.display_name AS interviewer_name
          FROM interviews i
+         JOIN game_players interviewer ON interviewer.id = i.interviewer_player_id
          JOIN interview_answers ia2 ON ia2.interview_id = i.id
          JOIN questions q ON q.id = ia2.question_id
          WHERE i.round_id = $1

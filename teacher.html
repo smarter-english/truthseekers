@@ -615,6 +615,9 @@
       async function openDebug(gameId) {
         currentGameId = gameId;
         lastKnownSeq = null;
+        showRoles = false;
+        const toggleBtn = document.getElementById("toggleRolesBtn");
+        if (toggleBtn) toggleBtn.textContent = "Show roles";
         document.getElementById("debugView").style.display = "block";
         await refreshDebug();
         startSeqPolling();

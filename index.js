@@ -117,21 +117,6 @@ async function createPodsAndAssignmentsForRound(gameId, roundId) {
 
   const totalLive = allPlayers.filter(p => p.is_alive).length;
 
-  // ideal pod count from POD_SPLITS
-  const idealSplit = POD_SPLITS[N] || [N];
-  const idealPodCount = idealSplit.length;
-
-  // maximum pods we can sustain with at least 2 live players each
-  let podCount;
-  if (totalLive >= 2 * idealPodCount) {
-    podCount = idealPodCount;
-  } else if (totalLive >= 2) {
-    podCount = Math.floor(totalLive / 2);
-  } else {
-    // endgame: fewer than 2 live players, just one pod
-    podCount = 1;
-  }
-
   // shuffle players once
   const shuffled = shuffleArray(allPlayers);
   const ghostPlayers = shuffled.filter(p => !p.is_alive);
@@ -161,17 +146,35 @@ async function createPodsAndAssignmentsForRound(gameId, roundId) {
   }
 
   // decide desired pod sizes
+  // When there's a demo pod, size the remaining pods based on remaining live player count
+  // so we maximise even-sized pods independently of the demo pod.
+  let podCount;
   let podSizes;
-  if (podCount === idealPodCount) {
-    // use ideal sizes if counts match
-    podSizes = [...idealSplit];
+
+  if (hasDemoPod) {
+    const remainingLive = totalLive - starPlayerIds.size;
+    const remainingSplit = POD_SPLITS[remainingLive] || [remainingLive];
+    podCount = 1 + remainingSplit.length; // demo pod + regular pods
+    podSizes = [starPlayerIds.size, ...remainingSplit];
   } else {
-    // fallback: balanced pods
-    const baseSize = Math.floor(N / podCount);
-    const remainder = N % podCount;
-    podSizes = [];
-    for (let i = 0; i < podCount; i++) {
-      podSizes.push(baseSize + (i < remainder ? 1 : 0));
+    const idealSplit = POD_SPLITS[N] || [N];
+    const idealPodCount = idealSplit.length;
+    if (totalLive >= 2 * idealPodCount) {
+      podCount = idealPodCount;
+    } else if (totalLive >= 2) {
+      podCount = Math.floor(totalLive / 2);
+    } else {
+      podCount = 1;
+    }
+    if (podCount === idealPodCount) {
+      podSizes = [...idealSplit];
+    } else {
+      const baseSize = Math.floor(N / podCount);
+      const remainder = N % podCount;
+      podSizes = [];
+      for (let i = 0; i < podCount; i++) {
+        podSizes.push(baseSize + (i < remainder ? 1 : 0));
+      }
     }
   }
 
@@ -788,9 +791,15 @@ async function startSingleGame(gameId) {
   const starIds = starsRes.rows.map(r => r.id);
   const nonStarPlayers = players.filter(p => !starIds.includes(p.id));
 
-  // How many stars should be baddies (rounded, proportional to overall ratio)
+  // How many stars should be baddies: proportional to overall ratio, but at least 2
+  // (so the demo pod always has a genuine baddie vs goodie dynamic).
+  // Capped at star count and total baddies available.
   const baddieRatio = numBaddies / numPlayers;
-  const starBaddieCount = Math.round(baddieRatio * starIds.length);
+  const starBaddieCount = Math.min(
+    starIds.length,
+    numBaddies,
+    Math.max(starIds.length >= 2 ? 2 : 1, Math.round(baddieRatio * starIds.length))
+  );
 
   // Shuffle stars and non-stars independently, then allocate roles
   const shuffledStars = [...starIds].sort(() => Math.random() - 0.5);
